@@ -4,12 +4,10 @@ __pycache__/
 .pytest_cache/
 .env
 *.db
-*.onnx
-*.h5
-images/
-faiss_store/
-faiss_store.index
-faiss_id_map.json
+# *.onnx
+# faiss_store/
+# faiss_store.index
+# faiss_id_map.json
 event_uploads_tmp/
 benchmark_report.json
 search_results.txt
