@@ -42,6 +42,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=deps /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 COPY --from=deps /usr/local/bin /usr/local/bin
 
+# Download AI Models (YuNet and ArcFace) if not present
+# This keeps the git repo light while ensuring production has the models
+RUN curl -L https://github.com/opencv/opencv_zoo/raw/master/models/face_detection_yunet/face_detection_yunet_2023mar.onnx -o face_detection_yunet.onnx && \
+    curl -L https://github.com/onnx/models/raw/main/validated/vision/body_analysis/arcface/model/arcfaceresnet100-8.onnx -o arcfaceresnet100-8.onnx
+
 # Copy application code (exclude test/debug scripts via .dockerignore)
 COPY . .
 
