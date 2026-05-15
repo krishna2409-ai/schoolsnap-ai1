@@ -1,0 +1,9 @@
+Index total vectors: 178
+Query vector norm: 1.0000
+
+Top Matches found (5):
+Path: D:\Projects\SNAP!\test\Highlights\WhatsApp Image 2026-03-20 at 6.17.10 PM.jpeg, Score: 0.6341
+Path: D:\Projects\SNAP!\test\Highlights\WhatsApp Image 2026-03-20 at 6.17.10 PM.jpeg, Score: 0.6341
+Path: D:\Projects\SNAP!\test\Highlights\WhatsApp Image 2026-03-20 at 6.17.16 PM (1).jpeg, Score: 0.8173
+Path: D:\Projects\SNAP!\test\Highlights\WhatsApp Image 2026-03-20 at 6.17.16 PM (1).jpeg, Score: 0.8173
+Path: D:\Projects\SNAP!\test\Highlights\WhatsApp Image 2026-03-20 at 6.17.16 PM.jpeg, Score: 1.1041
