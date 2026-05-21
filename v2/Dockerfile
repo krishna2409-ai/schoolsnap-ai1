@@ -1,5 +1,5 @@
 # ╔══════════════════════════════════════════════════════════════════════╗
-# ║  SchoolSnap V1 (Base) — Production Dockerfile                       ║
+# ║  SchoolSnap V2 (Investor) — Production Dockerfile                   ║
 # ║  Multi-stage: Node build → Nginx serve                             ║
 # ╚══════════════════════════════════════════════════════════════════════╝
 
