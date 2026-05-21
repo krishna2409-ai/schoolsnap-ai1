@@ -111,6 +111,10 @@ class AIService:
                         "embedding": emb_arr.tolist(),
                         "bbox": [int(bbox[0]/scale), int(bbox[1]/scale), 
                                  int((bbox[0]+bbox[2])/scale), int((bbox[1]+bbox[3])/scale)],
+                        "landmarks": [
+                            [int(point[0] / scale), int(point[1] / scale)]
+                            for point in landmarks
+                        ],
                         "confidence": confidence
                     })
                 except Exception as e:

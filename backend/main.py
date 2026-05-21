@@ -67,6 +67,15 @@ os.makedirs(EVENT_UPLOAD_DIR, exist_ok=True)
 # Temporary upload registry for two-step event ingestion API.
 pending_event_uploads: Dict[str, dict] = {}
 
+
+def to_db_path(abs_path: str) -> str:
+    """Convert an absolute path to a relative path from BASE_DIR for DB storage."""
+    try:
+        return os.path.relpath(abs_path, BASE_DIR).replace("\\", "/")
+    except ValueError:
+        # If paths are on different drives in Windows
+        return abs_path.replace("\\", "/")
+
 # ─── Auth helpers ─────────────────────────────────────────────────────
 
 def get_password_hash(password: str) -> str:
@@ -230,9 +239,24 @@ async def lifespan(app: FastAPI):
 # ─── App ──────────────────────────────────────────────────────────────
 app = FastAPI(title="SchoolSnap AI", version="1.0.0", lifespan=lifespan)
 
+# CORS Configuration
+# In production, we explicitly allow the frontend URL to avoid CORS blocking.
+frontend_url = "https://frontend-v1-production-d3d2.up.railway.app"
+env_origins = os.getenv("CORS_ORIGINS", "*")
+
+if env_origins == "*":
+    origins = ["*"]
+else:
+    origins = [o.strip() for o in env_origins.split(",")]
+
+# Ensure the production frontend is always allowed
+if frontend_url not in origins and "*" not in origins:
+    origins.append(frontend_url)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,
+    allow_credentials=True if "*" not in origins else False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -729,7 +753,7 @@ async def upload_selfies(
             # embeddings_count += 1
             
             # Privacy: KEEP the selfie image for UI visibility (reverted from deletion)
-            db.add_selfie(file_id, child_id, file_path, embedding_json)
+            db.add_selfie(file_id, child_id, to_db_path(file_path), embedding_json)
             embeddings_count += 1
         else:
             # If no face detected, we don't store anything for privacy/efficiency
@@ -789,7 +813,7 @@ def process_event_folder(event_id: str, folder_path: str):
             faces = ai_service.extract_faces(img_path)
             
             # Store in database
-            db.add_event_image(image_id, event_id, img_path, preview_path, filename, len(faces))
+            db.add_event_image(image_id, event_id, to_db_path(img_path), to_db_path(preview_path), filename, len(faces))
             
             # Persist and Add embeddings to FAISS
             if faces:
@@ -806,7 +830,7 @@ def process_event_folder(event_id: str, folder_path: str):
                     # Store in FAISS for search
                     embeddings.append(emb)
                     metadata.append({
-                        "image_path": img_path, 
+                        "image_path": to_db_path(img_path), 
                         "image_id": image_id, 
                         "bbox": bbox, 
                         "event_id": event_id,
@@ -879,7 +903,7 @@ async def load_event_folder(
         raise HTTPException(status_code=400, detail="No images found in folder")
     
     event_id = str(uuid.uuid4())
-    db.create_event(event_id, event_name, folder_path, image_count)
+    db.create_event(event_id, event_name, to_db_path(folder_path), image_count)
     
     # Process in background
     background_tasks.add_task(process_event_folder, event_id, folder_path)
@@ -954,7 +978,7 @@ async def process_event_images(
 
     final_event_name = event_name or upload_meta["event_name"]
     event_id = str(uuid.uuid4())
-    db.create_event(event_id, final_event_name, folder_path, upload_meta["total_images"])
+    db.create_event(event_id, final_event_name, to_db_path(folder_path), upload_meta["total_images"])
 
     background_tasks.add_task(process_event_folder, event_id, folder_path)
     pending_event_uploads.pop(upload_id, None)
@@ -1015,9 +1039,19 @@ async def verify_selfie_frame(file: UploadFile = File(...)):
         if not faces:
             # Return a clear signal it's bad
             return JSONResponse(status_code=400, content={"detail": "No face detected"})
-        
+
+        primary_face = max(
+            faces,
+            key=lambda x: (x["bbox"][2] - x["bbox"][0]) * (x["bbox"][3] - x["bbox"][1]),
+        )
+
         # Face matched!
-        return {"status": "ok", "faces": len(faces)}
+        return {
+            "status": "ok",
+            "faces": len(faces),
+            "primary_bbox": primary_face.get("bbox"),
+            "landmarks": primary_face.get("landmarks"),
+        }
     finally:
         if os.path.exists(temp_file):
             os.remove(temp_file)
@@ -1068,7 +1102,7 @@ async def match_images(token: str = Form(...), child_id: str = Form(...)):
         image = db.get_event_image(image_id)
         if not image:
             continue
-        if not image.get("preview_path") or not os.path.exists(image["preview_path"]):
+        if not image.get("preview_path") or not os.path.exists(os.path.join(BASE_DIR, image["preview_path"])):
             continue
 
         is_purchased = image_id in user_purchases
@@ -1125,10 +1159,10 @@ async def get_hd_image(image_id: str, token: str = ""):
     if not image:
         raise HTTPException(status_code=404, detail="Image not found")
     
-    if not os.path.exists(image["original_path"]):
+    if not os.path.exists(os.path.join(BASE_DIR, image["original_path"])):
         raise HTTPException(status_code=404, detail="Image file not found")
     
-    return FileResponse(image["original_path"], media_type="image/jpeg")
+    return FileResponse(os.path.join(BASE_DIR, image["original_path"]), media_type="image/jpeg")
 
 # ─── Gallery ──────────────────────────────────────────────────────────
 

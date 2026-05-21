@@ -141,7 +141,7 @@ def get_children(user_id: str) -> List[dict]:
             for s in selfies:
                 # If file exists, return URL, else return indicator
                 file_basename = os.path.basename(s['file_path'])
-                has_file = os.path.exists(s['file_path'])
+                has_file = os.path.exists(os.path.join(os.path.dirname(__file__), s['file_path']))
                 child["selfies"].append({
                     "id": s["id"], 
                     "url": f"/images/selfies/{file_basename}" if has_file else None,
