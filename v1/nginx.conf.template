@@ -29,7 +29,11 @@ server {
 
     # ── Proxy /api/ requests to the Backend dynamically ─────────────
     location /api/ {
-        proxy_pass ${BACKEND_URL}/;
+        resolver 8.8.8.8 1.1.1.1 valid=30s;
+        set $backend "${BACKEND_URL}";
+        rewrite ^/api/(.*)$ /$1 break;
+        proxy_pass $backend;
+        
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
