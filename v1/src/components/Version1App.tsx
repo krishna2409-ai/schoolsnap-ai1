@@ -167,6 +167,18 @@ function ScannerPage({ session, onLogout }: { session: Session; onLogout: () => 
     if (!intervalRef.current) { intervalRef.current = setInterval(() => void doScan(), 3500); }
   };
 
+  const handleSkipScan = () => {
+    stopCam();
+    setStatus('found');
+    setMsg('Demo Mode: Face Scan Bypassed');
+    setMatches([
+      { id: 'demo1', preview_url: 'https://images.unsplash.com/photo-1544717305-2782549b5136?q=80&w=600&auto=format&fit=crop', confidence_pct: 97.8, source: 'annual_sports_012.jpg' },
+      { id: 'demo2', preview_url: 'https://images.unsplash.com/photo-1503676260728-1c00da094a0b?q=80&w=600&auto=format&fit=crop', confidence_pct: 91.5, source: 'classroom_science_04.jpg' },
+      { id: 'demo3', preview_url: 'https://images.unsplash.com/photo-1588072432836-e10032774350?q=80&w=600&auto=format&fit=crop', confidence_pct: 88.3, source: 'school_assembly_09.jpg' },
+      { id: 'demo4', preview_url: 'https://images.unsplash.com/photo-1516627145497-ae6968895b74?q=80&w=600&auto=format&fit=crop', confidence_pct: 84.1, source: 'playground_recess_02.jpg' }
+    ]);
+  };
+
   /* ── Purchase flow ── */
   const openPurchase = (m: Match) => {
     setSelected(m); setPayStep(purchased.has(m.id) ? 'done' : 'info');
@@ -247,16 +259,38 @@ function ScannerPage({ session, onLogout }: { session: Session; onLogout: () => 
       <Header title={`${session.child_name}'s Photos`} onBack={onLogout} />
       <main className="v1-shell">
         {/* Camera */}
-        <section className="v1-card v1-scanner-card">
+        <section className="v1-card v1-scanner-card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <div className="v1-cam-viewport">
             <video ref={videoRef} playsInline muted className="v1-cam-video" />
             {status === 'scanning' && <div className="v1-scan-line" />}
             {camErr && <div className="v1-cam-error">{camErr}</div>}
           </div>
-          <div className="v1-scan-status">
+          <div className="v1-scan-status" style={{ marginBottom: status === 'scanning' ? '12px' : '0' }}>
             <span className={`v1-status-dot ${status}`} />
             <span>{msg || 'Ready to scan'}</span>
           </div>
+          {status === 'scanning' && (
+            <button 
+              type="button" 
+              className="v1-btn-ghost" 
+              onClick={handleSkipScan}
+              style={{
+                width: '100%',
+                padding: '12px',
+                borderRadius: '8px',
+                border: '1px dashed #3b82f6',
+                background: 'rgba(59, 130, 246, 0.08)',
+                color: '#60a5fa',
+                cursor: 'pointer',
+                fontWeight: 600,
+                fontSize: '0.9rem',
+                textAlign: 'center',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              ⚡ Demo Mode: Skip Face Scan
+            </button>
+          )}
         </section>
 
         {/* Results */}
