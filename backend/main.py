@@ -362,12 +362,17 @@ async def parent_login(
         raise HTTPException(status_code=400, detail="No child mapped to this account")
 
     token = create_token(user["id"])
+    reg_digits = ''.join(filter(str.isdigit, registration_number))
+    mock_phone = f"+91 90000 {reg_digits.zfill(5)}" if reg_digits else "+91 90000 00000"
+    
     return {
         "token": token,
         "registration_number": registration_number.strip().upper(),
         "parent_name": user["name"],
         "child_id": child["id"],
         "child_name": child["name"],
+        "email": user["email"],
+        "phone": mock_phone,
     }
 
 

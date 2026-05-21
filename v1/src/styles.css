@@ -669,11 +669,11 @@ body::before {
 }
 
 .v1-photo-img-wrap img.blurred {
-  filter: blur(14px) brightness(0.6) contrast(1.1);
+  filter: blur(2.5px) brightness(0.7);
 }
 
 .v1-photo-card:hover .v1-photo-img-wrap img.blurred {
-  filter: blur(12px) brightness(0.65) contrast(1.1);
+  filter: blur(2px) brightness(0.75);
 }
 
 .v1-lock-badge {
@@ -773,7 +773,7 @@ body::before {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  filter: blur(18px) brightness(0.5) contrast(1.1);
+  filter: blur(3.5px) brightness(0.7) contrast(1.05);
   transition: all 0.6s var(--v1-ease-smooth);
 }
 
@@ -1093,4 +1093,178 @@ body::before {
   .v1-header {
     padding: 1rem 1.25rem;
   }
+}
+
+/* 3D Rotating Credit Card / OTP Panel */
+.payment-flip-container {
+  perspective: 1000px;
+  width: 100%;
+  height: 180px;
+  margin: 1.25rem 0;
+}
+.payment-flip-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  text-align: center;
+  transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  transform-style: preserve-3d;
+}
+.payment-flip-inner.flipped {
+  transform: rotateY(180deg);
+}
+.payment-card-front, .payment-card-back {
+  position: absolute;
+  inset: 0;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  border-radius: 12px;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+.payment-card-front {
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%);
+  color: white;
+  text-align: left;
+}
+.payment-card-back {
+  background: linear-gradient(135deg, #020617 0%, #0f172a 100%);
+  color: #f1f5f9;
+  transform: rotateY(180deg);
+  border-color: rgba(0, 229, 255, 0.35);
+  text-align: left;
+}
+.payment-card-glow {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(125deg, rgba(255,255,255,0.15) 0%, transparent 40%, rgba(255,255,255,0.1) 60%, transparent 100%);
+  pointer-events: none;
+  z-index: 1;
+}
+.payment-card-chip {
+  width: 38px;
+  height: 26px;
+  background: linear-gradient(135deg, #ffd700, #b8860b);
+  border-radius: 4px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: inset 0 1px 2px rgba(255,255,255,0.4);
+}
+.payment-card-chip::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border: 1px solid rgba(0,0,0,0.15);
+  background-image: linear-gradient(rgba(0,0,0,0.1) 1px, transparent 1px),
+                    linear-gradient(90deg, rgba(0,0,0,0.1) 1px, transparent 1px);
+  background-size: 4px 4px;
+}
+.payment-card-logo {
+  font-weight: 800;
+  font-size: 0.8rem;
+  letter-spacing: 0.05em;
+  color: var(--accent-cyan);
+  text-shadow: 0 0 10px rgba(0, 229, 255, 0.5);
+  text-transform: uppercase;
+}
+
+/* Modern Toast Alert Queue */
+.toast-container {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  max-width: 320px;
+  pointer-events: none;
+  width: calc(100% - 3rem);
+}
+.toast-alert {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.8rem 1.1rem;
+  background: rgba(2, 6, 23, 0.94);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  color: #f1f5f9;
+  font-size: 0.82rem;
+  font-weight: 500;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+  transform: translateY(20px);
+  opacity: 0;
+  animation: toast-slide-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transition: all 0.2s ease;
+}
+.toast-alert.success {
+  border-color: rgba(16, 185, 129, 0.35);
+  box-shadow: 0 0 15px rgba(16, 185, 129, 0.12);
+}
+.toast-alert.error {
+  border-color: rgba(239, 68, 68, 0.35);
+  box-shadow: 0 0 15px rgba(239, 68, 68, 0.12);
+}
+.toast-alert.info {
+  border-color: rgba(0, 229, 255, 0.35);
+  box-shadow: 0 0 15px rgba(0, 229, 255, 0.12);
+}
+.toast-icon {
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+@keyframes toast-slide-in {
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Scrollable Terminal Operation Console */
+.terminal-log-console {
+  background: rgba(2, 6, 23, 0.9);
+  border: 1px solid rgba(0, 229, 255, 0.2);
+  border-radius: 8px;
+  padding: 0.7rem;
+  width: 100%;
+  height: 100px;
+  overflow-y: auto;
+  font-family: 'Fira Code', monospace;
+  font-size: 0.72rem;
+  color: #00E5FF;
+  box-shadow: inset 0 2px 6px rgba(0,0,0,0.8);
+  margin-top: 0.85rem;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 229, 255, 0.3) transparent;
+}
+.terminal-log-console::-webkit-scrollbar {
+  width: 4px;
+}
+.terminal-log-console::-webkit-scrollbar-thumb {
+  background: rgba(0, 229, 255, 0.3);
+  border-radius: 2px;
+}
+.terminal-line {
+  margin-bottom: 0.2rem;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-all;
+  opacity: 0.88;
+  animation: terminal-line-fade 0.15s ease-out;
+}
+.terminal-line.info { color: #00E5FF; }
+.terminal-line.success { color: #4ade80; }
+.terminal-line.warn { color: #fb923c; }
+.terminal-line.error { color: #f87171; }
+@keyframes terminal-line-fade {
+  from { opacity: 0; transform: translateX(-4px); }
+  to { opacity: 1; transform: translateX(0); }
 }

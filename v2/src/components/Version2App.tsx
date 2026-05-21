@@ -3,7 +3,7 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 const API = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 const abs = (p: string) => (p.startsWith('http') ? p : `${API}${p}`);
 
-type Session = { token: string; registration_number: string; parent_name: string; child_id: string; child_name: string };
+type Session = { token: string; registration_number: string; parent_name: string; child_id: string; child_name: string; email?: string; phone?: string };
 type Match = { id: string; preview_url: string; confidence_pct: number; source: string };
 type EventInfo = { id: string; name: string; status: string; processed: number; total: number };
 
@@ -382,17 +382,70 @@ function ParentAccessV2() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const dots: { x: number; y: number; vx: number; vy: number }[] = [];
-    for (let i = 0; i < 20; i++) {
-      dots.push({
-        x: 0.35 + Math.random() * 0.3,
-        y: 0.3 + Math.random() * 0.4,
-        vx: (Math.random() - 0.5) * 0.005,
-        vy: (Math.random() - 0.5) * 0.005,
-      });
-    }
+    // Create a small 40x30 in-memory temp canvas
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = 40;
+    tempCanvas.height = 30;
+    const tempCtx = tempCanvas.getContext('2d');
 
+    let smoothX = 0.5;
+    let smoothY = 0.5;
+    let smoothW = 0.35;
+    let smoothH = 0.45;
+    let initialized = false;
     let angle = 0;
+
+    const relativeLandmarks = [
+      // Jawline (0-8)
+      { x: -0.35, y: -0.2, group: 'jaw' },
+      { x: -0.3, y: 0.05, group: 'jaw' },
+      { x: -0.22, y: 0.25, group: 'jaw' },
+      { x: -0.12, y: 0.38, group: 'jaw' },
+      { x: 0, y: 0.42, group: 'jaw' },
+      { x: 0.12, y: 0.38, group: 'jaw' },
+      { x: 0.22, y: 0.25, group: 'jaw' },
+      { x: 0.3, y: 0.05, group: 'jaw' },
+      { x: 0.35, y: -0.2, group: 'jaw' },
+
+      // Left Eyebrow (9-12)
+      { x: -0.25, y: -0.32, group: 'l_brow' },
+      { x: -0.18, y: -0.37, group: 'l_brow' },
+      { x: -0.1, y: -0.35, group: 'l_brow' },
+      { x: -0.04, y: -0.3, group: 'l_brow' },
+
+      // Right Eyebrow (13-16)
+      { x: 0.04, y: -0.3, group: 'r_brow' },
+      { x: 0.1, y: -0.35, group: 'r_brow' },
+      { x: 0.18, y: -0.37, group: 'r_brow' },
+      { x: 0.25, y: -0.32, group: 'r_brow' },
+
+      // Left Eye (17-20)
+      { x: -0.22, y: -0.18, group: 'l_eye' },
+      { x: -0.17, y: -0.21, group: 'l_eye' },
+      { x: -0.12, y: -0.18, group: 'l_eye' },
+      { x: -0.17, y: -0.15, group: 'l_eye' },
+
+      // Right Eye (21-24)
+      { x: 0.12, y: -0.18, group: 'r_eye' },
+      { x: 0.17, y: -0.21, group: 'r_eye' },
+      { x: 0.22, y: -0.18, group: 'r_eye' },
+      { x: 0.17, y: -0.15, group: 'r_eye' },
+
+      // Nose Bridge (25-27)
+      { x: 0, y: -0.25, group: 'nose_br' },
+      { x: 0, y: -0.1, group: 'nose_br' },
+      { x: 0, y: 0.02, group: 'nose_br' },
+
+      // Nose Base (28-30)
+      { x: -0.07, y: 0.08, group: 'nose_bs' },
+      { x: 0, y: 0.11, group: 'nose_bs' },
+      { x: 0.07, y: 0.08, group: 'nose_bs' },
+
+      // Mouth (31-33)
+      { x: -0.12, y: 0.23, group: 'mouth' },
+      { x: 0, y: 0.27, group: 'mouth' },
+      { x: 0.12, y: 0.23, group: 'mouth' }
+    ];
 
     const render = () => {
       if (!active) return;
@@ -408,7 +461,91 @@ function ParentAccessV2() {
       const h = canvas.height;
       ctx.clearRect(0, 0, w, h);
 
-      // Oval Face Guide (Aether Cyan)
+      let targetX = 0.5;
+      let targetY = 0.5;
+      let targetW = 0.35;
+      let targetH = 0.45;
+      let detected = false;
+
+      // Skin tone tracking
+      if (video.readyState >= 2 && tempCtx) {
+        try {
+          tempCtx.drawImage(video, 0, 0, 40, 30);
+          const imgData = tempCtx.getImageData(0, 0, 40, 30);
+          const data = imgData.data;
+
+          let sumX = 0;
+          let sumY = 0;
+          let count = 0;
+          let minX = 40, maxX = 0, minY = 30, maxY = 0;
+
+          for (let y = 0; y < 30; y++) {
+            for (let x = 0; x < 40; x++) {
+              const idx = (y * 40 + x) * 4;
+              const r = data[idx];
+              const g = data[idx + 1];
+              const b = data[idx + 2];
+              
+              const max = Math.max(r, g, b);
+              const min = Math.min(r, g, b);
+              
+              // Skin chrominance threshold rules
+              if (r > 70 && g > 45 && b > 30 && r > g && r > b && (max - min) > 12 && (r - g) > 12) {
+                sumX += x;
+                sumY += y;
+                count++;
+                if (x < minX) minX = x;
+                if (x > maxX) maxX = x;
+                if (y < minY) minY = y;
+                if (y > maxY) maxY = y;
+              }
+            }
+          }
+
+          if (count > 8) {
+            detected = true;
+            const cx = (sumX / count) / 40;
+            const cy = (sumY / count) / 30;
+            const rw = (maxX - minX + 1) / 40;
+            const rh = (maxY - minY + 1) / 30;
+
+            targetX = cx;
+            targetY = cy;
+            targetW = Math.max(0.2, Math.min(0.6, rw * 1.5));
+            targetH = Math.max(0.25, Math.min(0.8, rh * 1.5));
+          }
+        } catch (e) {
+          // ignore canvas access errors
+        }
+      }
+
+      if (!detected) {
+        targetX = 0.5;
+        targetY = 0.5;
+        const time = Date.now() * 0.002;
+        targetW = 0.35 + Math.sin(time) * 0.02;
+        targetH = 0.45 + Math.sin(time) * 0.02;
+      }
+
+      if (!initialized) {
+        smoothX = targetX;
+        smoothY = targetY;
+        smoothW = targetW;
+        smoothH = targetH;
+        initialized = true;
+      } else {
+        smoothX = smoothX * 0.85 + targetX * 0.15;
+        smoothY = smoothY * 0.85 + targetY * 0.15;
+        smoothW = smoothW * 0.85 + targetW * 0.15;
+        smoothH = smoothH * 0.85 + targetH * 0.15;
+      }
+
+      const pxX = smoothX * w;
+      const pxY = smoothY * h;
+      const pxW = smoothW * w;
+      const pxH = smoothH * h;
+
+      // Oval Face Guide (Aether Cyan, centered as standard V2 layout)
       ctx.strokeStyle = 'rgba(0, 229, 255, 0.35)';
       ctx.lineWidth = 1.5;
       ctx.setLineDash([6, 6]);
@@ -417,37 +554,106 @@ function ParentAccessV2() {
       ctx.stroke();
       ctx.setLineDash([]);
 
-      // Dynamic Mesh
-      ctx.fillStyle = 'rgba(0, 229, 255, 0.85)';
-      ctx.strokeStyle = 'rgba(0, 229, 255, 0.2)';
-      ctx.lineWidth = 1;
-      dots.forEach(d => {
-        d.x += d.vx;
-        d.y += d.vy;
-        if (d.x < 0.25 || d.x > 0.75) d.vx *= -1;
-        if (d.y < 0.2 || d.y > 0.8) d.vy *= -1;
+      // Draw dynamic target sight brackets on the corners of the face bounding box (Aether V2 feature)
+      const boxLeft = pxX - pxW / 2;
+      const boxRight = pxX + pxW / 2;
+      const boxTop = pxY - pxH / 2;
+      const boxBottom = pxY + pxH / 2;
+      
+      const bracketLen = 14;
+      ctx.strokeStyle = '#00E5FF';
+      ctx.lineWidth = 2.5;
+      
+      // Top-Left corner
+      ctx.beginPath();
+      ctx.moveTo(boxLeft, boxTop + bracketLen);
+      ctx.lineTo(boxLeft, boxTop);
+      ctx.lineTo(boxLeft + bracketLen, boxTop);
+      ctx.stroke();
+      
+      // Top-Right corner
+      ctx.beginPath();
+      ctx.moveTo(boxRight, boxTop + bracketLen);
+      ctx.lineTo(boxRight, boxTop);
+      ctx.lineTo(boxRight - bracketLen, boxTop);
+      ctx.stroke();
+      
+      // Bottom-Left corner
+      ctx.beginPath();
+      ctx.moveTo(boxLeft, boxBottom - bracketLen);
+      ctx.lineTo(boxLeft, boxBottom);
+      ctx.lineTo(boxLeft + bracketLen, boxBottom);
+      ctx.stroke();
+      
+      // Bottom-Right corner
+      ctx.beginPath();
+      ctx.moveTo(boxRight, boxBottom - bracketLen);
+      ctx.lineTo(boxRight, boxBottom);
+      ctx.lineTo(boxRight - bracketLen, boxBottom);
+      ctx.stroke();
 
+      // Generate facial landmarks with slight micro-jitter
+      const jitterAmount = 0.004;
+      const mappedPoints = relativeLandmarks.map(p => {
+        const jitterX = (Math.random() - 0.5) * jitterAmount * pxW;
+        const jitterY = (Math.random() - 0.5) * jitterAmount * pxH;
+        return {
+          x: pxX + p.x * pxW + jitterX,
+          y: pxY + p.y * pxH + jitterY,
+          group: p.group
+        };
+      });
+
+      // Connected Vector Lines (V2 Cyan Style)
+      ctx.strokeStyle = 'rgba(0, 229, 255, 0.4)';
+      ctx.lineWidth = 1;
+      
+      const drawLine = (p1: typeof mappedPoints[0], p2: typeof mappedPoints[0]) => {
         ctx.beginPath();
-        ctx.arc(d.x * w, d.y * h, 2.5, 0, 2 * Math.PI);
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.stroke();
+      };
+
+      // 1. Jawline
+      for (let i = 0; i < 8; i++) drawLine(mappedPoints[i], mappedPoints[i+1]);
+      // 2. Left Eyebrow
+      for (let i = 9; i < 12; i++) drawLine(mappedPoints[i], mappedPoints[i+1]);
+      // 3. Right Eyebrow
+      for (let i = 13; i < 16; i++) drawLine(mappedPoints[i], mappedPoints[i+1]);
+      // 4. Left Eye
+      for (let i = 17; i < 20; i++) drawLine(mappedPoints[i], mappedPoints[i+1]);
+      drawLine(mappedPoints[20], mappedPoints[17]);
+      // 5. Right Eye
+      for (let i = 21; i < 24; i++) drawLine(mappedPoints[i], mappedPoints[i+1]);
+      drawLine(mappedPoints[24], mappedPoints[21]);
+      // 6. Nose Bridge
+      for (let i = 25; i < 27; i++) drawLine(mappedPoints[i], mappedPoints[i+1]);
+      // 7. Nose Base
+      for (let i = 28; i < 30; i++) drawLine(mappedPoints[i], mappedPoints[i+1]);
+      // 8. Mouth
+      for (let i = 31; i < 33; i++) drawLine(mappedPoints[i], mappedPoints[i+1]);
+
+      // Cross-group mesh links
+      drawLine(mappedPoints[10], mappedPoints[18]);
+      drawLine(mappedPoints[15], mappedPoints[22]);
+      drawLine(mappedPoints[26], mappedPoints[19]);
+      drawLine(mappedPoints[26], mappedPoints[21]);
+      drawLine(mappedPoints[27], mappedPoints[29]);
+      drawLine(mappedPoints[29], mappedPoints[32]);
+      drawLine(mappedPoints[31], mappedPoints[3]);
+      drawLine(mappedPoints[33], mappedPoints[5]);
+
+      // Pulsing circular node points
+      const pulseRadius = 2.5 + Math.sin(Date.now() * 0.01) * 0.8;
+      ctx.fillStyle = 'rgba(0, 229, 255, 0.85)';
+      mappedPoints.forEach(p => {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, pulseRadius, 0, 2 * Math.PI);
         ctx.fill();
       });
 
-      // Links
-      for (let i = 0; i < dots.length; i++) {
-        for (let j = i + 1; j < dots.length; j++) {
-          const dx = (dots[i].x - dots[j].x) * w;
-          const dy = (dots[i].y - dots[j].y) * h;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < w * 0.16) {
-            ctx.beginPath();
-            ctx.moveTo(dots[i].x * w, dots[i].y * h);
-            ctx.lineTo(dots[j].x * w, dots[j].y * h);
-            ctx.stroke();
-          }
-        }
-      }
-
-      // Corner Brackets
+      // Viewport Corner Brackets
       const pad = 24;
       const len = 16;
       ctx.strokeStyle = '#00E5FF';
@@ -469,21 +675,21 @@ function ParentAccessV2() {
       ctx.moveTo(w - pad, h - pad - len); ctx.lineTo(w - pad, h - pad); ctx.lineTo(w - pad - len, h - pad);
       ctx.stroke();
 
-      // Telemetry ring
+      // Telemetry ring tracking the face center
       angle += 0.02;
       ctx.strokeStyle = 'rgba(0, 229, 255, 0.45)';
       ctx.beginPath();
-      ctx.arc(w / 2, h / 2, w * 0.14, angle, angle + 1.2);
+      ctx.arc(pxX, pxY, pxW * 0.35, angle, angle + 1.2);
       ctx.stroke();
       ctx.beginPath();
-      ctx.arc(w / 2, h / 2, w * 0.14, angle + Math.PI, angle + Math.PI + 1.2);
+      ctx.arc(pxX, pxY, pxW * 0.35, angle + Math.PI, angle + Math.PI + 1.2);
       ctx.stroke();
 
-      // Crosshairs
+      // Crosshairs tracking the face center
       ctx.strokeStyle = 'rgba(0, 229, 255, 0.25)';
       ctx.beginPath();
-      ctx.moveTo(w / 2 - 12, h / 2); ctx.lineTo(w / 2 + 12, h / 2);
-      ctx.moveTo(w / 2, h / 2 - 12); ctx.lineTo(w / 2, h / 2 + 12);
+      ctx.moveTo(pxX - 12, pxY); ctx.lineTo(pxX + 12, pxY);
+      ctx.moveTo(pxX, pxY - 12); ctx.lineTo(pxX, pxY + 12);
       ctx.stroke();
 
       // Digital labels
@@ -584,7 +790,7 @@ function ParentAccessV2() {
   const openPurchase = (m: Match) => {
     addLog(`Accessing asset element target: ${m.id}`, 'info');
     setSelected(m); setPayStep(purchased.has(m.id) ? 'done' : 'pay');
-    setEmail(''); setPhone(''); setOtp(''); setOtpErr('');
+    setEmail(session.email || ''); setPhone(session.phone || ''); setOtp(''); setOtpErr('');
   };
   const closePurchase = () => {
     addLog('Returning to search HUD layout...', 'info');
@@ -786,19 +992,6 @@ function ParentAccessV2() {
                 ⚡ BYPASS PROTOCOL: DEMO SCAN
               </button>
             )}
-
-            {/* Scrolling Logs inside Scanner HUD */}
-            <div className="terminal-log-console" ref={logConsoleRef} style={{ width: 'calc(100% - 2rem)', margin: '0.5rem 1rem 1rem' }}>
-              {logs.length === 0 ? (
-                <div className="terminal-line info">[SYSTEM] Standby. Optical engines loaded.</div>
-              ) : (
-                logs.map(log => (
-                  <div key={log.id} className={`terminal-line ${log.type}`}>
-                    [{log.time}] {log.text}
-                  </div>
-                ))
-              )}
-            </div>
 
             <div className="hud-footer">
               <div className="hud-message">{msg}</div>
