@@ -775,14 +775,7 @@ function ScannerPage({ session, onLogout }: { session: Session; onLogout: () => 
               </div>
             )}
 
-            {/* Live Scrolling Terminal Logs inside Checkout Details Card */}
-            <div className="terminal-log-console" ref={logConsoleRef} style={{ margin: '1rem', width: 'auto' }}>
-              {logs.map(log => (
-                <div key={log.id} className={`terminal-line ${log.type}`}>
-                  [{log.time}] {log.text}
-                </div>
-              ))}
-            </div>
+
           </div>
         </main>
 
