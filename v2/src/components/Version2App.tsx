@@ -918,15 +918,6 @@ function ParentAccessV2() {
                 <button className="ghost-btn-aether" onClick={closePurchase}>Find More Photos</button>
               </div>
             )}
-
-            {/* Rolling Logs inside Aether Checkout Card */}
-            <div className="terminal-log-console" ref={logConsoleRef} style={{ marginTop: '1.5rem', width: 'auto' }}>
-              {logs.map(log => (
-                <div key={log.id} className={`terminal-line ${log.type}`}>
-                  [{log.time}] {log.text}
-                </div>
-              ))}
-            </div>
           </div>
         </div>
       </main>
