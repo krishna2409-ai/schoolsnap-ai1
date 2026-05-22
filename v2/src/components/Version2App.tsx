@@ -1,6 +1,13 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 
-const API = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
+const getApiUrl = () => {
+  const host = window.location.hostname;
+  if (host === 'localhost' || host === '127.0.0.1' || host.startsWith('192.168.')) {
+    return 'http://localhost:8000';
+  }
+  return 'https://schoolsnap-ai1-production.up.railway.app';
+};
+const API = getApiUrl();
 const abs = (p: string) => (p.startsWith('http') ? p : `${API}${p}`);
 
 type Session = { token: string; registration_number: string; parent_name: string; child_id: string; child_name: string; email?: string; phone?: string };
