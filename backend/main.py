@@ -318,7 +318,7 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "SchoolSnap AI",
-        "version": "1.0.0",
+        "version": "1.0.0-bypass-v2",
         "faiss_vectors": faiss_count,
     }
 
