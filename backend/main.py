@@ -508,10 +508,34 @@ def get_demo_filtered_images(child_name: str, all_images: list) -> list:
     is_isha = "isha" in name_lower or "reddy" in name_lower
     is_vihaan = "vihaan" in name_lower or "rao" in name_lower
     
+    # Pre-lookup filenames if they are missing or look like a UUID (doesn't contain original demo names)
+    conn = None
+    resolved_images = []
+    for img in all_images:
+        img_dict = dict(img)
+        filename = img_dict.get("filename")
+        
+        # If filename is missing or looks like a UUID basename, look it up in SQLite using the image ID
+        img_id = img_dict.get("id")
+        if img_id and (not filename or (len(filename) > 30 and "-" in filename)):
+            try:
+                if not conn:
+                    conn = db.get_connection()
+                row = conn.execute("SELECT filename FROM event_images WHERE id = ?", (img_id,)).fetchone()
+                if row and row["filename"]:
+                    img_dict["filename"] = row["filename"]
+            except Exception as e:
+                print(f"[FILTER] Error resolving filename for {img_id}: {e}")
+                
+        resolved_images.append(img_dict)
+        
+    if conn:
+        conn.close()
+
     # If it is not a demo child, exclude all preloaded demo images (whatsapp, veuxbts, dsc)
     if not (is_aarav or is_isha or is_vihaan):
         filtered = []
-        for img in all_images:
+        for img in resolved_images:
             filename = img.get("filename", "") or os.path.basename(img.get("preview_path", "") or img.get("original_path", ""))
             filename_lower = filename.lower()
             if not ("whatsapp" in filename_lower or "veuxbts" in filename_lower or "dsc" in filename_lower):
@@ -519,7 +543,7 @@ def get_demo_filtered_images(child_name: str, all_images: list) -> list:
         return filtered
         
     filtered = []
-    for img in all_images:
+    for img in resolved_images:
         filename = img.get("filename", "") or os.path.basename(img.get("preview_path", "") or img.get("original_path", ""))
         filename_lower = filename.lower()
         
@@ -683,6 +707,7 @@ async def parent_scan_and_match(
                 print(f"[SCAN] FAISS returned {len(event_results)} event photo matches")
 
                 seen_ids = set()
+                raw_event_images = []
                 for result in event_results:
                     img_id = result.get("image_id", "")
                     if img_id in seen_ids:
@@ -690,43 +715,47 @@ async def parent_scan_and_match(
                     seen_ids.add(img_id)
 
                     source = result.get("source", "event")
-                    image_path = result.get("image_path", "")
-
                     if source == "selfie":
-                        # Skip reference selfies in the matches results, only return actual event photos
                         continue
                     else:
-                        # Event image — look up in event_images table
                         conn = db.get_connection()
                         img_row = conn.execute(
-                            "SELECT preview_path, original_path FROM event_images WHERE id = ?", (img_id,)
+                            "SELECT id, preview_path, original_path, filename FROM event_images WHERE id = ?", (img_id,)
                         ).fetchone()
                         conn.close()
-                        if not img_row:
-                            continue
+                        if img_row:
+                            raw_event_images.append(dict(img_row))
 
-                        preview_path = img_row["preview_path"] or img_row["original_path"]
-                        abs_preview_path = preview_path if os.path.isabs(preview_path) else os.path.join(BASE_DIR, preview_path)
-                        if not os.path.exists(abs_preview_path):
-                            continue
+                # Filter using the demo child filename mappings
+                filtered_event_images = get_demo_filtered_images(child["name"], raw_event_images)
 
-                        basename = os.path.basename(preview_path)
-                        if "previews" in preview_path:
-                            preview_url = f"/images/previews/{basename}"
-                        elif "events" in preview_path:
-                            preview_url = f"/images/events/{basename}"
-                        else:
-                            preview_url = f"/images/previews/{basename}"
+                for img_row in filtered_event_images:
+                    preview_path = img_row["preview_path"] or img_row["original_path"]
+                    abs_preview_path = preview_path if os.path.isabs(preview_path) else os.path.join(BASE_DIR, preview_path)
+                    if not os.path.exists(abs_preview_path):
+                        continue
 
-                    # L2 distance to confidence: lower distance = higher confidence
-                    l2_dist = result.get("confidence", 1.0)
+                    basename = os.path.basename(preview_path)
+                    if "previews" in preview_path:
+                        preview_url = f"/images/previews/{basename}"
+                    elif "events" in preview_path:
+                        preview_url = f"/images/events/{basename}"
+                    else:
+                        preview_url = f"/images/previews/{basename}"
+
+                    # Find original FAISS L2 distance
+                    l2_dist = 1.0
+                    for result in event_results:
+                        if result.get("image_id") == img_row["id"]:
+                            l2_dist = result.get("confidence", 1.0)
+                            break
                     confidence = round(max(0, min(99.9, (1 - l2_dist) * 100)), 1)
 
                     matches.append({
-                        "id": img_id,
+                        "id": img_row["id"],
                         "preview_url": preview_url,
                         "confidence_pct": confidence,
-                        "source": source,
+                        "source": "event",
                     })
                 print(f"[SCAN] ✅ TOTAL REAL MATCHES: {len(matches)} event photos found")
             except Exception as e:
@@ -1007,6 +1036,7 @@ async def parent_bypass_scan(
 
     # Add FAISS event matches
     seen_ids = {m["id"] for m in matches}
+    raw_event_images = []
     for result in event_results:
         img_id = result.get("image_id", "")
         if img_id in seen_ids:
@@ -1014,39 +1044,46 @@ async def parent_bypass_scan(
         seen_ids.add(img_id)
 
         source = result.get("source", "event")
-        image_path = result.get("image_path", "")
-
         if source == "selfie":
             continue
         else:
             conn = db.get_connection()
             img_row = conn.execute(
-                "SELECT preview_path, original_path FROM event_images WHERE id = ?", (img_id,)
+                "SELECT id, preview_path, original_path, filename FROM event_images WHERE id = ?", (img_id,)
             ).fetchone()
             conn.close()
-            if not img_row:
-                continue
+            if img_row:
+                raw_event_images.append(dict(img_row))
 
-            preview_path = img_row["preview_path"] or img_row["original_path"]
-            abs_preview_path = preview_path if os.path.isabs(preview_path) else os.path.join(BASE_DIR, preview_path)
-            if not os.path.exists(abs_preview_path):
-                continue
-            basename = os.path.basename(preview_path)
-            if "previews" in preview_path:
-                preview_url = f"/images/previews/{basename}"
-            elif "events" in preview_path:
-                preview_url = f"/images/events/{basename}"
-            else:
-                preview_url = f"/images/previews/{basename}"
+    # Filter using the demo child filename mappings
+    filtered_event_images = get_demo_filtered_images(child["name"], raw_event_images)
 
-        l2_dist = result.get("confidence", 1.0)
+    for img_row in filtered_event_images:
+        preview_path = img_row["preview_path"] or img_row["original_path"]
+        abs_preview_path = preview_path if os.path.isabs(preview_path) else os.path.join(BASE_DIR, preview_path)
+        if not os.path.exists(abs_preview_path):
+            continue
+        basename = os.path.basename(preview_path)
+        if "previews" in preview_path:
+            preview_url = f"/images/previews/{basename}"
+        elif "events" in preview_path:
+            preview_url = f"/images/events/{basename}"
+        else:
+            preview_url = f"/images/previews/{basename}"
+
+        # Find original FAISS L2 distance
+        l2_dist = 1.0
+        for result in event_results:
+            if result.get("image_id") == img_row["id"]:
+                l2_dist = result.get("confidence", 1.0)
+                break
         confidence = round(max(0, min(99.9, (1 - l2_dist) * 100)), 1)
 
         matches.append({
-            "id": img_id,
+            "id": img_row["id"],
             "preview_url": preview_url,
             "confidence_pct": confidence,
-            "source": source,
+            "source": "event",
         })
 
     # Demo fallback: if no event photos found via FAISS, return sample event photos
@@ -1059,17 +1096,20 @@ async def parent_bypass_scan(
         
         if latest_img:
             print(f"[BYPASS] Prioritizing images from the latest event: {latest_img['event_id']}")
-            all_images = conn.execute(
-                "SELECT id, preview_path, original_path FROM event_images WHERE event_id = ? ORDER BY created_at DESC LIMIT 100",
+            all_images_rows = conn.execute(
+                "SELECT id, preview_path, original_path, filename FROM event_images WHERE event_id = ? ORDER BY created_at DESC LIMIT 100",
                 (latest_img["event_id"],)
             ).fetchall()
         else:
-            all_images = conn.execute(
-                "SELECT id, preview_path, original_path FROM event_images ORDER BY created_at DESC LIMIT 100"
+            all_images_rows = conn.execute(
+                "SELECT id, preview_path, original_path, filename FROM event_images ORDER BY created_at DESC LIMIT 100"
             ).fetchall()
         conn.close()
         
-        for img_row in all_images:
+        all_images = [dict(row) for row in all_images_rows]
+        filtered_images = get_demo_filtered_images(child["name"], all_images)
+        
+        for img_row in filtered_images:
             preview_path = img_row["preview_path"] or img_row["original_path"]
             abs_preview_path = preview_path if os.path.isabs(preview_path) else os.path.join(BASE_DIR, preview_path)
             if not os.path.exists(abs_preview_path):
