@@ -9,19 +9,41 @@ class AIService:
         self.detector = None
         self.recognizer = None
         
-        # Paths to models in backend folder
+        # Paths to models in backend folder or parent container folder
         self.base_dir = os.path.dirname(os.path.abspath(__file__))
-        self.yunet_path = os.path.join(self.base_dir, "face_detection_yunet.onnx")
-        self.arcface_path = os.path.join(self.base_dir, "arcfaceresnet100-8.onnx")
+        self.parent_dir = os.path.dirname(self.base_dir)
+        
+        # Check parent folder first (container root) then fall back to base_dir
+        yunet_root = os.path.join(self.parent_dir, "face_detection_yunet.onnx")
+        if os.path.exists(yunet_root):
+            self.yunet_path = yunet_root
+        else:
+            self.yunet_path = os.path.join(self.base_dir, "face_detection_yunet.onnx")
+            
+        arcface_root = os.path.join(self.parent_dir, "arcfaceresnet100-8.onnx")
+        if os.path.exists(arcface_root):
+            self.arcface_path = arcface_root
+        else:
+            self.arcface_path = os.path.join(self.base_dir, "arcfaceresnet100-8.onnx")
 
     def _ensure_initialized(self, width: int = 320, height: int = 320):
         if not self._initialized:
             print(f"[AI] Initializing ONNX pipeline (YuNet + ArcFace)...")
             
+            # Additional check: let's try root/app files directly if we still see errors
             if not os.path.exists(self.yunet_path):
-                raise FileNotFoundError(f"Missing YuNet model at {self.yunet_path}")
+                alt_yunet = "/app/face_detection_yunet.onnx"
+                if os.path.exists(alt_yunet):
+                    self.yunet_path = alt_yunet
+                else:
+                    raise FileNotFoundError(f"Missing YuNet model at {self.yunet_path}")
+                    
             if not os.path.exists(self.arcface_path):
-                raise FileNotFoundError(f"Missing ArcFace model at {self.arcface_path}")
+                alt_arcface = "/app/arcfaceresnet100-8.onnx"
+                if os.path.exists(alt_arcface):
+                    self.arcface_path = alt_arcface
+                else:
+                    raise FileNotFoundError(f"Missing ArcFace model at {self.arcface_path}")
 
             # Initialize Detector
             self.detector = cv2.FaceDetectorYN.create(
