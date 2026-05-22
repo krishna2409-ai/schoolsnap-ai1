@@ -1051,6 +1051,15 @@ function ParentAccessV2() {
 /* HOME PAGE (Investor version — shows both portals)                  */
 /* ══════════════════════════════════════════════════════════════════ */
 function HomePageV2() {
+  const navigate = (to: string) => {
+    // Retain current subpath prefix (/investor or /v2) if present
+    const prefix = window.location.pathname.match(/^\/(investor|v2)/)?.[0] ?? '';
+    const targetPath = `${prefix}${to}`;
+    window.history.pushState({}, '', targetPath);
+    // Dispatch a popstate event so the parent router updates its path state
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  };
+
   return (
     <div className="aether-layout">
       <SecureHeader title="Aether Security" />
@@ -1061,22 +1070,30 @@ function HomePageV2() {
           <p>Instant biometric photo retrieval for premium school events.<br />Powered by Aether Security Protocols.</p>
         </section>
         <section className="split-grid">
-          <a href="/admin" className="portal-link-aether">
+          <button 
+            onClick={() => navigate('/admin')} 
+            className="portal-link-aether-btn"
+            style={{ background: 'none', border: 'none', padding: 0, textAlign: 'left', cursor: 'pointer', width: '100%' }}
+          >
             <article className="glass-card portal-card">
               <div className="card-top"><span className="icon">🏫</span><div className="neon-label">ADMIN</div></div>
               <h2>Upload Photos</h2>
               <p>Bulk upload and index event photos for face recognition.</p>
               <div className="portal-arrow-aether">ENTER PORTAL →</div>
             </article>
-          </a>
-          <a href="/parent" className="portal-link-aether">
+          </button>
+          <button 
+            onClick={() => navigate('/parent')} 
+            className="portal-link-aether-btn"
+            style={{ background: 'none', border: 'none', padding: 0, textAlign: 'left', cursor: 'pointer', width: '100%' }}
+          >
             <article className="glass-card portal-card">
               <div className="card-top"><span className="icon">🛡️</span><div className="neon-label">PUBLIC</div></div>
               <h2>Parent Access</h2>
               <p>Scan face to instantly retrieve and unlock event memories.</p>
               <div className="portal-arrow-aether">ACCESS SYSTEM →</div>
             </article>
-          </a>
+          </button>
         </section>
       </main>
     </div>
@@ -1088,9 +1105,17 @@ function HomePageV2() {
 /* ══════════════════════════════════════════════════════════════════ */
 export default function Version2App() {
   const [path, setPath] = useState(window.location.pathname);
-  useEffect(() => { const h = () => setPath(window.location.pathname); window.addEventListener('popstate', h); return () => window.removeEventListener('popstate', h); }, []);
+  
+  useEffect(() => {
+    const handlePopState = () => setPath(window.location.pathname);
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
-  if (path === '/admin') return <AdminUpload />;
-  if (path === '/parent') return <ParentAccessV2 />;
+  // Normalize path to strip subpath prefixes (/investor or /v2)
+  const normalizedPath = path.replace(/^\/(investor|v2)/, '');
+
+  if (normalizedPath === '/admin') return <AdminUpload />;
+  if (normalizedPath === '/parent') return <ParentAccessV2 />;
   return <HomePageV2 />;
 }
