@@ -27,6 +27,11 @@ class AIService:
             self.arcface_path = os.path.join(self.base_dir, "arcfaceresnet100-8.onnx")
 
     def _ensure_initialized(self, width: int = 320, height: int = 320):
+        if os.getenv("BYPASS_HEAVY_AI", "true").lower() == "true":
+            print("[AI] Bypassing heavy ONNX pipeline initialization (BYPASS_HEAVY_AI=true)")
+            self._initialized = True
+            return
+
         if not self._initialized:
             print(f"[AI] Initializing ONNX pipeline (YuNet + ArcFace)...")
             
@@ -68,6 +73,9 @@ class AIService:
         """
         Detects faces and generates 512d embeddings using YuNet and ArcFace ONNX.
         """
+        if os.getenv("BYPASS_HEAVY_AI", "true").lower() == "true":
+            print(f"[AI] Bypassing face extraction for {image_path} to conserve memory.")
+            return []
         # Read image
         try:
             from PIL import Image, ImageOps
