@@ -26,7 +26,7 @@ FROM nginx:1.27-alpine AS production
 RUN rm /etc/nginx/conf.d/default.conf
 
 # Default backend URL environment variable for substitution
-ENV BACKEND_URL=http://schoolsnap-ai1:8000
+ENV BACKEND_URL=https://schoolsnap-ai1-production.up.railway.app
 
 # Copy custom nginx config template
 COPY nginx.conf.template /etc/nginx/templates/default.conf.template
