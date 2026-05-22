@@ -1,4 +1,70 @@
-import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
+import { Component, ErrorInfo, FormEvent, ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+
+class AetherErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: Error | null; errorInfo: ErrorInfo | null }> {
+  public state = {
+    hasError: false,
+    error: null as Error | null,
+    errorInfo: null as ErrorInfo | null
+  };
+
+  public static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error, errorInfo: null };
+  }
+
+  public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error("Aether Error Boundary caught:", error, errorInfo);
+    this.setState({ errorInfo });
+  }
+
+  public render() {
+    if (this.state.hasError) {
+      return (
+        <div className="aether-layout" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#0a0f1d', color: '#fff', fontFamily: 'monospace' }}>
+          <header className="secure-nav" style={{ borderBottom: '1px solid rgba(239, 68, 68, 0.2)', padding: '1rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <span style={{ fontSize: '1.5rem' }}>⚠️</span>
+              <h1 style={{ fontSize: '1.25rem', fontWeight: 'bold', letterSpacing: '0.05em', color: '#ef4444', margin: 0 }}>SYSTEM EXCEPTION</h1>
+            </div>
+            <div className="secure-badge" style={{ background: 'rgba(239, 68, 68, 0.2)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.3)', padding: '0.25rem 0.75rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>CRITICAL</div>
+          </header>
+          <main className="shell narrow" style={{ flex: 1, padding: '2rem', display: 'flex', flexDirection: 'column', justifyContent: 'center', maxWidth: '800px', margin: '0 auto', width: '100%' }}>
+            <section className="glass-card" style={{ borderColor: 'rgba(239, 68, 68, 0.3)', background: 'rgba(10, 15, 29, 0.85)', padding: '2rem', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.37)', backdropFilter: 'blur(4px)' }}>
+              <div className="neon-label" style={{ color: '#ef4444', fontSize: '0.75rem', letterSpacing: '0.1em', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '0.5rem' }}>CORE CRASH DUMP</div>
+              <h2 style={{ margin: '0 0 0.5rem 0', fontSize: '1.5rem', color: '#fff' }}>Aether Core Interrupted</h2>
+              <p style={{ opacity: 0.8, fontSize: '0.9rem', marginBottom: '1.5rem', lineHeight: '1.5' }}>
+                An unhandled exception occurred during the parent portal lifecycle. The recovery sub-node has isolated the environment.
+              </p>
+              
+              <div style={{ background: 'rgba(0,0,0,0.6)', padding: '1.25rem', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.25)', overflowX: 'auto', marginBottom: '1.5rem', fontFamily: 'Consolas, Monaco, monospace' }}>
+                <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.95rem', marginBottom: '0.5rem' }}>
+                  {this.state.error?.toString()}
+                </div>
+                <pre style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.75)', whiteSpace: 'pre-wrap', margin: 0, lineHeight: '1.4' }}>
+                  {this.state.errorInfo?.componentStack || this.state.error?.stack}
+                </pre>
+              </div>
+
+              <div style={{ display: 'flex', gap: '1rem' }}>
+                <button className="neon-btn" onClick={() => window.location.reload()} style={{ background: 'rgba(239, 68, 68, 0.1)', borderColor: '#ef4444', color: '#ef4444', flex: 1, padding: '0.75rem', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', letterSpacing: '0.05em', border: '1px solid' }}>
+                  RESTART CORE
+                </button>
+                <button className="neon-btn" onClick={() => logoutAndReset()} style={{ background: 'rgba(0, 229, 255, 0.1)', borderColor: '#00E5FF', color: '#00E5FF', flex: 1, padding: '0.75rem', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', letterSpacing: '0.05em', border: '1px solid' }}>
+                  RESET PORTAL
+                </button>
+              </div>
+            </section>
+          </main>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+const logoutAndReset = () => {
+  window.location.href = window.location.pathname;
+};
 
 const getApiUrl = () => {
   const host = window.location.hostname;
@@ -1122,7 +1188,15 @@ export default function Version2App() {
   // Normalize path to strip subpath prefixes (/investor or /v2) and trailing slashes
   const normalizedPath = path.replace(/^\/(investor|v2)/, '').replace(/\/$/, '') || '/';
 
-  if (normalizedPath === '/admin') return <AdminUpload />;
-  if (normalizedPath === '/parent') return <ParentAccessV2 />;
-  return <HomePageV2 />;
+  const renderContent = () => {
+    if (normalizedPath === '/admin') return <AdminUpload />;
+    if (normalizedPath === '/parent') return <ParentAccessV2 />;
+    return <HomePageV2 />;
+  };
+
+  return (
+    <AetherErrorBoundary>
+      {renderContent()}
+    </AetherErrorBoundary>
+  );
 }
