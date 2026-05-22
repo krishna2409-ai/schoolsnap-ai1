@@ -27,8 +27,11 @@ class AIService:
             self.arcface_path = os.path.join(self.base_dir, "arcfaceresnet100-8.onnx")
 
     def _ensure_initialized(self, width: int = 320, height: int = 320):
-        if os.getenv("BYPASS_HEAVY_AI", "true").lower() == "true":
-            print("[AI] Bypassing heavy ONNX pipeline initialization (BYPASS_HEAVY_AI=true)")
+        # Smart bypass default: True on Railway/Docker, False in local dev
+        is_cloud = os.getenv("RAILWAY_STATIC_URL") or os.getenv("RAILWAY_SERVICE_ID") or os.path.exists("/.dockerenv")
+        default_bypass = "true" if is_cloud else "false"
+        if os.getenv("BYPASS_HEAVY_AI", default_bypass).lower() == "true":
+            print(f"[AI] Bypassing heavy ONNX pipeline initialization (BYPASS_HEAVY_AI={default_bypass} by default)")
             self._initialized = True
             return
 
@@ -73,8 +76,10 @@ class AIService:
         """
         Detects faces and generates 512d embeddings using YuNet and ArcFace ONNX.
         """
-        if os.getenv("BYPASS_HEAVY_AI", "true").lower() == "true":
-            print(f"[AI] Bypassing face extraction for {image_path} to conserve memory.")
+        is_cloud = os.getenv("RAILWAY_STATIC_URL") or os.getenv("RAILWAY_SERVICE_ID") or os.path.exists("/.dockerenv")
+        default_bypass = "true" if is_cloud else "false"
+        if os.getenv("BYPASS_HEAVY_AI", default_bypass).lower() == "true":
+            print(f"[AI] Bypassing face extraction for {image_path} (BYPASS_HEAVY_AI={default_bypass} by default).")
             return []
         # Read image
         try:
