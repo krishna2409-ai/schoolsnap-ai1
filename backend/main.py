@@ -680,6 +680,118 @@ async def parent_scan_and_match(
         if os.path.exists(temp_file):
             os.remove(temp_file)
 
+@app.post("/parent/bypass-scan")
+async def parent_bypass_scan(
+    token: str = Form(...),
+):
+    user_id = verify_token(token)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    child = get_primary_child(user_id)
+    if not child:
+        raise HTTPException(status_code=400, detail="No child mapped for this account")
+
+    # Get selfies for the logged-in user's child
+    selfies = db.get_selfies(child["id"])
+    if len(selfies) == 0:
+        return {
+            "status": "red",
+            "message": "No enrollment photos found for this child. Please enroll reference photos first.",
+            "child_name": child["name"],
+            "matches": [],
+        }
+
+    # Extract all real selfie embeddings to search FAISS
+    selfie_embeddings = []
+    for selfie in selfies:
+        emb_json = selfie.get("embedding_json")
+        if emb_json:
+            try:
+                emb = json.loads(emb_json)
+                if emb and len(emb) > 10 and not all(v == 0.0 for v in emb[:20]):
+                    selfie_embeddings.append(emb)
+            except Exception:
+                continue
+
+    if not selfie_embeddings:
+        return {
+            "status": "red",
+            "message": "No valid face embeddings found for this child. Reference photos may need to be re-enrolled.",
+            "child_name": child["name"],
+            "matches": [],
+        }
+
+    print(f"[BYPASS] Searching FAISS with {len(selfie_embeddings)} stored selfie embeddings")
+
+    event_results = vector_store.search(
+        query_embeddings=selfie_embeddings,
+        top_k=DATASET_TOP_K,
+        threshold=PARENT_FACE_ACCEPT_DISTANCE,
+        min_support=1,
+    )
+
+    matches = []
+    # Add selfie matches first
+    for selfie in selfies:
+        basename = os.path.basename(selfie["file_path"])
+        matches.append({
+            "id": selfie["id"],
+            "preview_url": f"/images/selfies/{basename}",
+            "confidence_pct": 99.9,
+            "source": "enrollment",
+        })
+
+    # Add FAISS event matches
+    seen_ids = {m["id"] for m in matches}
+    for result in event_results:
+        img_id = result.get("image_id", "")
+        if img_id in seen_ids:
+            continue
+        seen_ids.add(img_id)
+
+        source = result.get("source", "event")
+        image_path = result.get("image_path", "")
+
+        if source == "selfie":
+            continue
+        else:
+            conn = db.get_connection()
+            img_row = conn.execute(
+                "SELECT preview_path, original_path FROM event_images WHERE id = ?", (img_id,)
+            ).fetchone()
+            conn.close()
+            if not img_row:
+                continue
+
+            preview_path = img_row["preview_path"] or img_row["original_path"]
+            basename = os.path.basename(preview_path)
+            if "previews" in preview_path:
+                preview_url = f"/images/previews/{basename}"
+            elif "events" in preview_path:
+                preview_url = f"/images/events/{basename}"
+            else:
+                preview_url = f"/images/previews/{basename}"
+
+        l2_dist = result.get("confidence", 1.0)
+        confidence = round(max(0, min(99.9, (1 - l2_dist) * 100)), 1)
+
+        matches.append({
+            "id": img_id,
+            "preview_url": preview_url,
+            "confidence_pct": confidence,
+            "source": source,
+        })
+
+    print(f"[BYPASS] ✅ TOTAL: {len(matches)} photos ({len(selfies)} selfies + {len(matches) - len(selfies)} event)")
+
+    return {
+        "status": "green",
+        "message": f"Demo Mode: Bypassed face scan. Found {len(matches) - len(selfies)} event matches.",
+        "child_name": child["name"],
+        "matches": matches,
+    }
+
 @app.post("/delete-child")
 async def delete_child(token: str = Form(...), child_id: str = Form(...)):
     user_id = verify_token(token)

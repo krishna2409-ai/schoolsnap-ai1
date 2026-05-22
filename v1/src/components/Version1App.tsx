@@ -233,13 +233,18 @@ function ScannerPage({ session, onLogout }: { session: Session; onLogout: () => 
   }, [selected]);
 
   const rescan = () => {
+    stopCam();
     addLog('Resetting biometric search caches...', 'warn');
     showToast('Rescanning initiated...', 'info');
     setMatches([]);
-    void startCam();
+    setStatus('idle');
+    setMsg('Ready to scan');
+    setTimeout(() => {
+      void startCam();
+    }, 100);
   };
 
-  const handleSkipScan = () => {
+  const handleSkipScan = async () => {
     stopCam();
     addLog('MANUAL OVERRIDE TRIGGERED', 'warn');
     addLog('Compiling custom bypass token...', 'info');
@@ -250,18 +255,32 @@ function ScannerPage({ session, onLogout }: { session: Session; onLogout: () => 
     setTimeout(() => addLog('Resolving depth mesh (812 mapped nodes)...', 'info'), 600);
     setTimeout(() => addLog('Scanning database index nodes...', 'info'), 900);
 
-    setTimeout(() => {
-      setStatus('found');
-      setMsg('Demo Mode: Face Scan Bypassed');
-      addLog('Bypass completed. 4 photo fragments decrypted.', 'success');
-      showToast('Holographic retrieval successful!', 'success');
-      setMatches([
-        { id: 'demo1', preview_url: 'https://images.unsplash.com/photo-1544717305-2782549b5136?q=80&w=600&auto=format&fit=crop', confidence_pct: 97.8, source: 'annual_sports_012.jpg' },
-        { id: 'demo2', preview_url: 'https://images.unsplash.com/photo-1503676260728-1c00da094a0b?q=80&w=600&auto=format&fit=crop', confidence_pct: 91.5, source: 'classroom_science_04.jpg' },
-        { id: 'demo3', preview_url: 'https://images.unsplash.com/photo-1588072432836-e10032774350?q=80&w=600&auto=format&fit=crop', confidence_pct: 88.3, source: 'school_assembly_09.jpg' },
-        { id: 'demo4', preview_url: 'https://images.unsplash.com/photo-1516627145497-ae6968895b74?q=80&w=600&auto=format&fit=crop', confidence_pct: 84.1, source: 'playground_recess_02.jpg' }
-      ]);
-    }, 1200);
+    try {
+      const fd = new FormData();
+      fd.append('token', session.token);
+      
+      const r = await fetch(`${API}/parent/bypass-scan`, { method: 'POST', body: fd });
+      const d = await r.json();
+      
+      if (!r.ok) {
+        throw new Error(d.detail ?? 'Bypass search failed');
+      }
+      
+      setTimeout(() => {
+        setStatus('found');
+        setMsg(d.message || 'Demo Mode: Face Scan Bypassed');
+        setMatches(d.matches || []);
+        addLog(`Bypass completed. ${d.matches?.length || 0} photo fragments decrypted.`, 'success');
+        showToast(d.message || 'Bypass successful!', 'success');
+      }, 1200);
+    } catch (x) {
+      setTimeout(() => {
+        setStatus('idle');
+        const errMsg = x instanceof Error ? x.message : 'Bypass failed';
+        addLog(`Bypass pipeline failed: ${errMsg}`, 'error');
+        showToast(errMsg, 'error');
+      }, 1200);
+    }
   };
 
   /* Canvas animation for Scanning Overlay */
