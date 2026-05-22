@@ -14,7 +14,9 @@ print(f"File exists: {os.path.exists(selfie_path)}")
 faces = ai_service.extract_faces(selfie_path)
 
 if faces:
-    new_emb = faces[0]["embedding"]
+    # Use the largest face
+    main_face = max(faces, key=lambda x: (x['bbox'][2] - x['bbox'][0]) * (x['bbox'][3] - x['bbox'][1]))
+    new_emb = main_face["embedding"]
     print(f"Old first 3: {old_emb[:3]}")
     print(f"New first 3: {new_emb[:3]}")
     

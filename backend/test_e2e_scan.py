@@ -38,6 +38,8 @@ selfie = conn.execute(
 conn.close()
 
 test_image = selfie["file_path"]
+if not os.path.isabs(test_image):
+    test_image = os.path.join("backend", test_image)
 print(f"Using selfie as scan input: {test_image}")
 print(f"File exists: {os.path.exists(test_image)}, size: {os.path.getsize(test_image)} bytes")
 

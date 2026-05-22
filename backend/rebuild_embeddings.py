@@ -32,8 +32,20 @@ def index_selfies_from_db(conn) -> int:
             continue
 
         file_path = row["file_path"]
-        if not os.path.exists(file_path):
-            continue
+        abs_path = file_path
+        if not os.path.isabs(abs_path):
+            test_path = os.path.join(BASE_DIR, file_path)
+            if os.path.exists(test_path):
+                abs_path = test_path
+            elif os.path.exists(file_path):
+                abs_path = os.path.abspath(file_path)
+            else:
+                print(f"  [Selfie] ⚠️  File not found: {file_path}")
+                continue
+        else:
+            if not os.path.exists(abs_path):
+                print(f"  [Selfie] ⚠️  File not found: {abs_path}")
+                continue
 
         vector_store.add_embeddings(
             [emb],
@@ -66,9 +78,15 @@ def index_events_via_extraction(conn) -> int:
         image_path = row["original_path"]
         preview_path = row["preview_path"] or image_path
 
-        if not os.path.exists(image_path):
-            print(f"  [Event {i+1}/{total}] ⚠️  Missing: {image_path}")
-            continue
+        abs_image_path = image_path
+        if not os.path.exists(abs_image_path):
+            project_root = os.path.dirname(BASE_DIR)
+            test_path = os.path.join(project_root, image_path)
+            if os.path.exists(test_path):
+                abs_image_path = test_path
+            else:
+                print(f"  [Event {i+1}/{total}] ⚠️  Missing: {image_path}")
+                continue
 
         # Check if faces are already stored for this image ID
         existing_faces = conn.execute(
@@ -92,9 +110,9 @@ def index_events_via_extraction(conn) -> int:
             indexed += len(existing_faces)
             continue
 
-        print(f"  [Event {i+1}/{total}] 🔍 Extracting from {os.path.basename(image_path)}...", end=" ", flush=True)
+        print(f"  [Event {i+1}/{total}] 🔍 Extracting from {os.path.basename(abs_image_path)}...", end=" ", flush=True)
         try:
-            faces = ai_service.extract_faces(image_path)
+            faces = ai_service.extract_faces(abs_image_path)
             print(f"{len(faces)} face(s)")
             if faces:
                 embeddings = []

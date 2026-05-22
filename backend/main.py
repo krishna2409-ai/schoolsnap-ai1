@@ -629,7 +629,8 @@ async def parent_scan_and_match(
 
             if source == "selfie":
                 # Selfie — image is in images/selfies/
-                if not os.path.exists(image_path):
+                abs_image_path = image_path if os.path.isabs(image_path) else os.path.join(BASE_DIR, image_path)
+                if not os.path.exists(abs_image_path):
                     continue
                 basename = os.path.basename(image_path)
                 preview_url = f"/images/selfies/{basename}"
@@ -644,7 +645,8 @@ async def parent_scan_and_match(
                     continue
 
                 preview_path = img_row["preview_path"] or img_row["original_path"]
-                if not os.path.exists(preview_path):
+                abs_preview_path = preview_path if os.path.isabs(preview_path) else os.path.join(BASE_DIR, preview_path)
+                if not os.path.exists(abs_preview_path):
                     continue
 
                 basename = os.path.basename(preview_path)

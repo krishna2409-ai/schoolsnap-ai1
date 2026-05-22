@@ -43,3 +43,7 @@ firebase-debug.log*
 tmp/
 *.pptx
 rebuild_output.txt
+
+# Large ONNX models
+backend/arcfaceresnet100-8.onnx
+
