@@ -1112,8 +1112,8 @@ export default function Version2App() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // Normalize path to strip subpath prefixes (/investor or /v2)
-  const normalizedPath = path.replace(/^\/(investor|v2)/, '');
+  // Normalize path to strip subpath prefixes (/investor or /v2) and trailing slashes
+  const normalizedPath = path.replace(/^\/(investor|v2)/, '').replace(/\/$/, '') || '/';
 
   if (normalizedPath === '/admin') return <AdminUpload />;
   if (normalizedPath === '/parent') return <ParentAccessV2 />;

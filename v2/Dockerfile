@@ -31,8 +31,9 @@ ENV BACKEND_URL=http://backend:8000
 # Copy custom nginx config template
 COPY nginx.conf.template /etc/nginx/templates/default.conf.template
 
-# Copy built assets
+# Copy built assets to both root and /investor subpath
 COPY --from=build /app/dist /usr/share/nginx/html
+COPY --from=build /app/dist /usr/share/nginx/html/investor
 
 # Non-root user
 RUN chown -R nginx:nginx /usr/share/nginx/html && \
