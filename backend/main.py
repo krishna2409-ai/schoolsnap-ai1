@@ -588,11 +588,14 @@ async def parent_scan_and_match(
             print(f"[SCAN] No FAISS matches found. Demo fallback: returning sample event photos.")
             conn = db.get_connection()
             all_images = conn.execute(
-                "SELECT id, preview_path, original_path FROM event_images LIMIT 20"
+                "SELECT id, preview_path, original_path FROM event_images LIMIT 100"
             ).fetchall()
             conn.close()
             for img_row in all_images:
                 preview_path = img_row["preview_path"] or img_row["original_path"]
+                abs_preview_path = preview_path if os.path.isabs(preview_path) else os.path.join(BASE_DIR, preview_path)
+                if not os.path.exists(abs_preview_path):
+                    continue
                 basename = os.path.basename(preview_path)
                 if "previews" in preview_path:
                     preview_url = f"/images/previews/{basename}"
@@ -606,6 +609,8 @@ async def parent_scan_and_match(
                     "confidence_pct": round(92.0 - len(matches) * 0.3, 1),
                     "source": "event",
                 })
+                if len(matches) >= 20:
+                    break
 
         best_confidence = matches[0]["confidence_pct"] if matches else 85.0
 
@@ -638,13 +643,16 @@ async def parent_bypass_scan(
         print(f"[BYPASS] No selfies found. Demo fallback: returning all event photos.")
         conn = db.get_connection()
         all_images = conn.execute(
-            "SELECT id, preview_path, original_path FROM event_images LIMIT 50"
+            "SELECT id, preview_path, original_path FROM event_images LIMIT 100"
         ).fetchall()
         conn.close()
 
         matches = []
         for img_row in all_images:
             preview_path = img_row["preview_path"] or img_row["original_path"]
+            abs_preview_path = preview_path if os.path.isabs(preview_path) else os.path.join(BASE_DIR, preview_path)
+            if not os.path.exists(abs_preview_path):
+                continue
             basename = os.path.basename(preview_path)
             if "previews" in preview_path:
                 preview_url = f"/images/previews/{basename}"
@@ -658,6 +666,8 @@ async def parent_bypass_scan(
                 "confidence_pct": round(95.0 - len(matches) * 0.5, 1),
                 "source": "event",
             })
+            if len(matches) >= 50:
+                break
 
         return {
             "status": "green",
@@ -729,6 +739,9 @@ async def parent_bypass_scan(
                 continue
 
             preview_path = img_row["preview_path"] or img_row["original_path"]
+            abs_preview_path = preview_path if os.path.isabs(preview_path) else os.path.join(BASE_DIR, preview_path)
+            if not os.path.exists(abs_preview_path):
+                continue
             basename = os.path.basename(preview_path)
             if "previews" in preview_path:
                 preview_url = f"/images/previews/{basename}"
