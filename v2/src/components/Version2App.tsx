@@ -365,93 +365,6 @@ function ParentAccessV2() {
     }
   }, [selected]);
 
-  const login = async (e: FormEvent) => {
-    e.preventDefault(); setErr(''); setBusy(true);
-    const fd = new FormData(); fd.append('registration_number', reg.trim()); fd.append('dob', dob.trim());
-    try {
-      const r = await fetch(`${API}/parent-login`, { method: 'POST', body: fd });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.detail);
-      setSession(d);
-    }
-    catch (x) { setErr(x instanceof Error ? x.message : 'Failed'); }
-    finally { setBusy(false); }
-  };
-
-  const logout = () => { stopCam(); setSession(null); setMatches([]); setStatus('idle'); setSelected(null); };
-  const rescan = () => {
-    addLog('Resetting token caches. Preparing array scan...', 'warn');
-    showToast('Restarting optic stream...', 'info');
-    setMatches([]);
-    void startCam();
-  };
-
-  /* Login Screen */
-  if (!session) return (
-    <div className="aether-layout">
-      <SecureHeader title="Parent Portal" onBack={() => (window.location.href = '/')} />
-      <main className="shell narrow centered-shell">
-        <div className="hero-fingerprint-wrap">
-          <div className="hero-glow" />
-          <div className="fingerprint-glass">
-            <div className="fingerprint-icon">🔍</div>
-          </div>
-        </div>
-        <section className="glass-card login-card-aether">
-          <div className="card-header">
-            <h2>Welcome Back</h2>
-            <p>Authorize access with your student credentials</p>
-          </div>
-          <form className="stack-form" onSubmit={login}>
-            <label>
-              <span className="neon-label">Registration No.</span>
-              <input value={reg} onChange={e => setReg(e.target.value)} required placeholder="REG1001" />
-            </label>
-            <label>
-              <span className="neon-label">Date of Birth</span>
-              <input type="date" value={dob} onChange={e => setDob(e.target.value)} required />
-            </label>
-            {err && <p style={{ color: '#ef4444', fontSize: '0.88rem' }}>{err}</p>}
-            <button type="submit" disabled={busy} className="neon-btn">
-              {busy ? 'Authenticating...' : 'Continue to Scan'}
-              <span className="arrow-icon">→</span>
-            </button>
-          </form>
-        </section>
-        <section className="demo-credentials-glass">
-          <div className="neon-label">DEMO ACCESS</div>
-          <p>REG1001 / 2014-05-12</p>
-        </section>
-      </main>
-    </div>
-  );
-
-
-  const handleSkipScan = () => {
-    stopCam();
-    addLog('MANUAL PORTAL BYPASS INITIATED', 'warn');
-    addLog('Compiling emergency decrypt key...', 'info');
-    showToast('Secure skip triggered! Decoding meshes...', 'info');
-    setStatus('hologram');
-    
-    setTimeout(() => addLog('Quantum grid initialized.', 'info'), 300);
-    setTimeout(() => addLog('Matching depth profile (812 face points)...', 'info'), 600);
-    setTimeout(() => addLog('Retrieving secure matching elements...', 'info'), 900);
-
-    setTimeout(() => {
-      setStatus('found');
-      setMsg('Demo Mode: Face Scan Bypassed');
-      addLog('Decryption authorized: 4 high-res fragments isolated.', 'success');
-      showToast('Public event memories decoded!', 'success');
-      setMatches([
-        { id: 'demo1', preview_url: 'https://images.unsplash.com/photo-1544717305-2782549b5136?q=80&w=600&auto=format&fit=crop', confidence_pct: 97.8, source: 'annual_sports_012.jpg' },
-        { id: 'demo2', preview_url: 'https://images.unsplash.com/photo-1503676260728-1c00da094a0b?q=80&w=600&auto=format&fit=crop', confidence_pct: 91.5, source: 'classroom_science_04.jpg' },
-        { id: 'demo3', preview_url: 'https://images.unsplash.com/photo-1588072432836-e10032774350?q=80&w=600&auto=format&fit=crop', confidence_pct: 88.3, source: 'school_assembly_09.jpg' },
-        { id: 'demo4', preview_url: 'https://images.unsplash.com/photo-1516627145497-ae6968895b74?q=80&w=600&auto=format&fit=crop', confidence_pct: 84.1, source: 'playground_recess_02.jpg' }
-      ]);
-    }, 1200);
-  };
-
   // Canvas animation for Scanning Overlay (V2 Aether Cyan Style)
   useEffect(() => {
     if (status !== 'scanning' || !videoRef.current || !overlayCanvasRef.current) return;
@@ -865,6 +778,92 @@ function ParentAccessV2() {
     render();
     return () => { active = false; };
   }, [status]);
+
+  const login = async (e: FormEvent) => {
+    e.preventDefault(); setErr(''); setBusy(true);
+    const fd = new FormData(); fd.append('registration_number', reg.trim()); fd.append('dob', dob.trim());
+    try {
+      const r = await fetch(`${API}/parent-login`, { method: 'POST', body: fd });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail);
+      setSession(d);
+    }
+    catch (x) { setErr(x instanceof Error ? x.message : 'Failed'); }
+    finally { setBusy(false); }
+  };
+
+  const logout = () => { stopCam(); setSession(null); setMatches([]); setStatus('idle'); setSelected(null); };
+  const rescan = () => {
+    addLog('Resetting token caches. Preparing array scan...', 'warn');
+    showToast('Restarting optic stream...', 'info');
+    setMatches([]);
+    void startCam();
+  };
+
+  /* Login Screen */
+  if (!session) return (
+    <div className="aether-layout">
+      <SecureHeader title="Parent Portal" onBack={() => (window.location.href = '/')} />
+      <main className="shell narrow centered-shell">
+        <div className="hero-fingerprint-wrap">
+          <div className="hero-glow" />
+          <div className="fingerprint-glass">
+            <div className="fingerprint-icon">🔍</div>
+          </div>
+        </div>
+        <section className="glass-card login-card-aether">
+          <div className="card-header">
+            <h2>Welcome Back</h2>
+            <p>Authorize access with your student credentials</p>
+          </div>
+          <form className="stack-form" onSubmit={login}>
+            <label>
+              <span className="neon-label">Registration No.</span>
+              <input value={reg} onChange={e => setReg(e.target.value)} required placeholder="REG1001" />
+            </label>
+            <label>
+              <span className="neon-label">Date of Birth</span>
+              <input type="date" value={dob} onChange={e => setDob(e.target.value)} required />
+            </label>
+            {err && <p style={{ color: '#ef4444', fontSize: '0.88rem' }}>{err}</p>}
+            <button type="submit" disabled={busy} className="neon-btn">
+              {busy ? 'Authenticating...' : 'Continue to Scan'}
+              <span className="arrow-icon">→</span>
+            </button>
+          </form>
+        </section>
+        <section className="demo-credentials-glass">
+          <div className="neon-label">DEMO ACCESS</div>
+          <p>REG1001 / 2014-05-12</p>
+        </section>
+      </main>
+    </div>
+  );
+
+  const handleSkipScan = () => {
+    stopCam();
+    addLog('MANUAL PORTAL BYPASS INITIATED', 'warn');
+    addLog('Compiling emergency decrypt key...', 'info');
+    showToast('Secure skip triggered! Decoding meshes...', 'info');
+    setStatus('hologram');
+    
+    setTimeout(() => addLog('Quantum grid initialized.', 'info'), 300);
+    setTimeout(() => addLog('Matching depth profile (812 face points)...', 'info'), 600);
+    setTimeout(() => addLog('Retrieving secure matching elements...', 'info'), 900);
+
+    setTimeout(() => {
+      setStatus('found');
+      setMsg('Demo Mode: Face Scan Bypassed');
+      addLog('Decryption authorized: 4 high-res fragments isolated.', 'success');
+      showToast('Public event memories decoded!', 'success');
+      setMatches([
+        { id: 'demo1', preview_url: 'https://images.unsplash.com/photo-1544717305-2782549b5136?q=80&w=600&auto=format&fit=crop', confidence_pct: 97.8, source: 'annual_sports_012.jpg' },
+        { id: 'demo2', preview_url: 'https://images.unsplash.com/photo-1503676260728-1c00da094a0b?q=80&w=600&auto=format&fit=crop', confidence_pct: 91.5, source: 'classroom_science_04.jpg' },
+        { id: 'demo3', preview_url: 'https://images.unsplash.com/photo-1588072432836-e10032774350?q=80&w=600&auto=format&fit=crop', confidence_pct: 88.3, source: 'school_assembly_09.jpg' },
+        { id: 'demo4', preview_url: 'https://images.unsplash.com/photo-1516627145497-ae6968895b74?q=80&w=600&auto=format&fit=crop', confidence_pct: 84.1, source: 'playground_recess_02.jpg' }
+      ]);
+    }, 1200);
+  };
 
   /* ── Purchase flow ── */
   const openPurchase = (m: Match) => {
