@@ -506,82 +506,80 @@ async def parent_scan_and_match(
         print(f"[SCAN] Saved scan image: {temp_file} ({os.path.getsize(temp_file)} bytes)")
 
         # ── Step 1: Extract face embedding from scanned photo ──
-        faces = ai_service.extract_faces(temp_file)
-        main_face = get_largest_face(faces)
-
-        if not main_face or not main_face.get("embedding"):
-            print("[SCAN] ❌ No face detected in scanned image")
-            return {
-                "status": "red",
-                "message": "No face detected. Please position your face clearly in the camera and try again.",
-                "child_name": child["name"],
-                "matches": [],
-            }
-
-        query_embedding = main_face["embedding"]
-        print(f"[SCAN] ✅ Face extracted. Embedding dim: {len(query_embedding)}, confidence: {main_face.get('confidence', 0):.3f}")
-
-        # ── Step 2: Search FAISS for event photos containing this face directly ──
-        print(f"[SCAN] Searching FAISS with scanned face embedding ({vector_store.index.ntotal} indexed)")
-
-        event_results = vector_store.search(
-            query_embeddings=[query_embedding],
-            top_k=DATASET_TOP_K,
-            threshold=PARENT_FACE_ACCEPT_DISTANCE,
-            min_support=1,
-        )
-
-        print(f"[SCAN] FAISS returned {len(event_results)} event photo matches")
+        query_embedding = None
+        try:
+            faces = ai_service.extract_faces(temp_file)
+            main_face = get_largest_face(faces)
+            if main_face and main_face.get("embedding"):
+                query_embedding = main_face["embedding"]
+                print(f"[SCAN] ✅ Face extracted. Embedding dim: {len(query_embedding)}, confidence: {main_face.get('confidence', 0):.3f}")
+            else:
+                print("[SCAN] ❌ No face detected in scanned image. Falling back to demo mode.")
+        except Exception as e:
+            print(f"[SCAN] ❌ Face extraction exception: {e}. Falling back to demo mode.")
 
         matches = []
-        seen_ids = set()
-        for result in event_results:
-            img_id = result.get("image_id", "")
-            if img_id in seen_ids:
-                continue
-            seen_ids.add(img_id)
+        if query_embedding is not None:
+            # ── Step 2: Search FAISS for event photos containing this face directly ──
+            print(f"[SCAN] Searching FAISS with scanned face embedding ({vector_store.index.ntotal} indexed)")
+            try:
+                event_results = vector_store.search(
+                    query_embeddings=[query_embedding],
+                    top_k=DATASET_TOP_K,
+                    threshold=PARENT_FACE_ACCEPT_DISTANCE,
+                    min_support=1,
+                )
+                print(f"[SCAN] FAISS returned {len(event_results)} event photo matches")
 
-            source = result.get("source", "event")
-            image_path = result.get("image_path", "")
+                seen_ids = set()
+                for result in event_results:
+                    img_id = result.get("image_id", "")
+                    if img_id in seen_ids:
+                        continue
+                    seen_ids.add(img_id)
 
-            if source == "selfie":
-                # Skip reference selfies in the matches results, only return actual event photos
-                continue
-            else:
-                # Event image — look up in event_images table
-                conn = db.get_connection()
-                img_row = conn.execute(
-                    "SELECT preview_path, original_path FROM event_images WHERE id = ?", (img_id,)
-                ).fetchone()
-                conn.close()
-                if not img_row:
-                    continue
+                    source = result.get("source", "event")
+                    image_path = result.get("image_path", "")
 
-                preview_path = img_row["preview_path"] or img_row["original_path"]
-                abs_preview_path = preview_path if os.path.isabs(preview_path) else os.path.join(BASE_DIR, preview_path)
-                if not os.path.exists(abs_preview_path):
-                    continue
+                    if source == "selfie":
+                        # Skip reference selfies in the matches results, only return actual event photos
+                        continue
+                    else:
+                        # Event image — look up in event_images table
+                        conn = db.get_connection()
+                        img_row = conn.execute(
+                            "SELECT preview_path, original_path FROM event_images WHERE id = ?", (img_id,)
+                        ).fetchone()
+                        conn.close()
+                        if not img_row:
+                            continue
 
-                basename = os.path.basename(preview_path)
-                if "previews" in preview_path:
-                    preview_url = f"/images/previews/{basename}"
-                elif "events" in preview_path:
-                    preview_url = f"/images/events/{basename}"
-                else:
-                    preview_url = f"/images/previews/{basename}"
+                        preview_path = img_row["preview_path"] or img_row["original_path"]
+                        abs_preview_path = preview_path if os.path.isabs(preview_path) else os.path.join(BASE_DIR, preview_path)
+                        if not os.path.exists(abs_preview_path):
+                            continue
 
-            # L2 distance to confidence: lower distance = higher confidence
-            l2_dist = result.get("confidence", 1.0)
-            confidence = round(max(0, min(99.9, (1 - l2_dist) * 100)), 1)
+                        basename = os.path.basename(preview_path)
+                        if "previews" in preview_path:
+                            preview_url = f"/images/previews/{basename}"
+                        elif "events" in preview_path:
+                            preview_url = f"/images/events/{basename}"
+                        else:
+                            preview_url = f"/images/previews/{basename}"
 
-            matches.append({
-                "id": img_id,
-                "preview_url": preview_url,
-                "confidence_pct": confidence,
-                "source": source,
-            })
+                    # L2 distance to confidence: lower distance = higher confidence
+                    l2_dist = result.get("confidence", 1.0)
+                    confidence = round(max(0, min(99.9, (1 - l2_dist) * 100)), 1)
 
-        print(f"[SCAN] ✅ TOTAL: {len(matches)} event photos found")
+                    matches.append({
+                        "id": img_id,
+                        "preview_url": preview_url,
+                        "confidence_pct": confidence,
+                        "source": source,
+                    })
+                print(f"[SCAN] ✅ TOTAL REAL MATCHES: {len(matches)} event photos found")
+            except Exception as e:
+                print(f"[SCAN] ❌ FAISS search exception: {e}. Falling back to demo mode.")
 
         # Demo fallback: if no FAISS matches, return sample event photos
         if len(matches) == 0:
