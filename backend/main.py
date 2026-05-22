@@ -224,14 +224,33 @@ def get_primary_child(user_id: str) -> Optional[dict]:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
-    db.init_db()
-    ensure_demo_parent_accounts()
-    seed_demo_enrollment_photos()
-    # Load FAISS index if exists
-    index_path = os.path.join(BASE_DIR, "faiss_store")
-    vector_store.load(index_path)
-    print(f"[Startup] FAISS index loaded: {vector_store.index.ntotal} vectors")
+    # Startup — wrapped in try/except to NEVER crash the server
+    try:
+        db.init_db()
+        print("[Startup] Database initialized")
+    except Exception as e:
+        print(f"[Startup] WARNING: Database init failed: {e}")
+
+    try:
+        ensure_demo_parent_accounts()
+        print("[Startup] Demo parent accounts ensured")
+    except Exception as e:
+        print(f"[Startup] WARNING: Demo accounts failed: {e}")
+
+    try:
+        seed_demo_enrollment_photos()
+        print("[Startup] Demo enrollment seeding complete")
+    except Exception as e:
+        print(f"[Startup] WARNING: Demo enrollment seeding failed (non-fatal): {e}")
+
+    try:
+        index_path = os.path.join(BASE_DIR, "faiss_store")
+        vector_store.load(index_path)
+        print(f"[Startup] FAISS index loaded: {vector_store.index.ntotal} vectors")
+    except Exception as e:
+        print(f"[Startup] WARNING: FAISS load failed: {e}")
+
+    print("[Startup] ✅ Server ready")
     yield
     # Shutdown
     pass
