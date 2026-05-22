@@ -3,7 +3,7 @@ __pycache__/
 *.pyo
 .pytest_cache/
 .env
-*.db
+# *.db
 # *.onnx
 # faiss_store/
 # faiss_store.index
