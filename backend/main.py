@@ -494,7 +494,7 @@ async def parent_scan_and_match(
             print("[SCAN] ❌ No face detected in scanned image")
             return {
                 "status": "red",
-                "message": "No face detected. Please position your child's face clearly in the camera and try again.",
+                "message": "No face detected. Please position your face clearly in the camera and try again.",
                 "child_name": child["name"],
                 "matches": [],
             }
@@ -502,113 +502,11 @@ async def parent_scan_and_match(
         query_embedding = main_face["embedding"]
         print(f"[SCAN] ✅ Face extracted. Embedding dim: {len(query_embedding)}, confidence: {main_face.get('confidence', 0):.3f}")
 
-        # ── Step 2: Get ALL selfie embeddings from the DB ──
-        import numpy as np
-
-        query_vec = np.array(query_embedding, dtype=np.float32)
-        query_norm = np.linalg.norm(query_vec)
-        if query_norm > 0:
-            query_vec = query_vec / query_norm
-
-        # Get selfies for the logged-in user's child
-        selfies = db.get_selfies(child["id"])
-        print(f"[SCAN] Comparing against {len(selfies)} stored selfies for child '{child['name']}'")
-
-        if len(selfies) == 0:
-            return {
-                "status": "red",
-                "message": "No enrollment photos found for this child. Please enroll reference photos first.",
-                "child_name": child["name"],
-                "matches": [],
-            }
-
-        # ── Step 3: Compute cosine similarity against each stored selfie ──
-        scored_selfies = []
-        for selfie in selfies:
-            emb_json = selfie.get("embedding_json")
-            if not emb_json:
-                continue
-            try:
-                stored_emb = json.loads(emb_json)
-                if not stored_emb or len(stored_emb) < 10:
-                    continue
-                # Skip mock embeddings (all zeros)
-                if all(v == 0.0 for v in stored_emb[:20]):
-                    print(f"[SCAN] Skipping mock embedding for selfie {selfie['id'][:8]}...")
-                    continue
-
-                stored_vec = np.array(stored_emb, dtype=np.float32)
-                stored_norm = np.linalg.norm(stored_vec)
-                if stored_norm > 0:
-                    stored_vec = stored_vec / stored_norm
-
-                # Cosine similarity: dot product of normalized vectors
-                similarity = float(np.dot(query_vec, stored_vec))
-                scored_selfies.append((selfie, similarity))
-                print(f"[SCAN] Selfie {selfie['id'][:8]}...: cosine similarity = {similarity:.4f}")
-            except Exception as e:
-                print(f"[SCAN] Error comparing selfie {selfie.get('id', '?')[:8]}: {e}")
-
-        if not scored_selfies:
-            return {
-                "status": "red",
-                "message": "No valid face embeddings found for this child. Embeddings may need to be regenerated.",
-                "child_name": child["name"],
-                "matches": [],
-            }
-
-        # Sort by similarity (highest first)
-        scored_selfies.sort(key=lambda x: x[1], reverse=True)
-        best_similarity = scored_selfies[0][1]
-        print(f"[SCAN] Best similarity: {best_similarity:.4f}")
-
-        # ── Step 4: Apply threshold ──
-        # GhostFaceNet cosine similarity thresholds:
-        #   > 0.55 = strong match (same person)
-        #   > 0.35 = possible match
-        #   < 0.35 = different person
-        MATCH_THRESHOLD = 0.35
-
-        if best_similarity < MATCH_THRESHOLD:
-            return {
-                "status": "red",
-                "message": f"Face not recognized. Similarity: {best_similarity:.0%}. Please try with a clearer photo of your child.",
-                "child_name": child["name"],
-                "matches": [],
-            }
-
-        # ── Step 5: Build results — selfie matches + event photo matches ──
-        matches = []
-
-        # 5a: Add selfie matches
-        for selfie, sim in scored_selfies:
-            if sim < MATCH_THRESHOLD * 0.8:
-                continue
-            basename = os.path.basename(selfie["file_path"])
-            confidence = round(min(99.9, sim * 100), 1)
-            matches.append({
-                "id": selfie["id"],
-                "preview_url": f"/images/selfies/{basename}",
-                "confidence_pct": confidence,
-                "source": "enrollment",
-            })
-
-        # 5b: Search FAISS for event photos containing this face
-        # Use ALL stored selfie embeddings as query vectors for better recall
-        selfie_embeddings = []
-        for selfie in selfies:
-            emb_json = selfie.get("embedding_json")
-            if emb_json:
-                emb = json.loads(emb_json)
-                if emb and len(emb) > 10 and not all(v == 0.0 for v in emb[:20]):
-                    selfie_embeddings.append(emb)
-
-        # Also include the scanned face as a query
-        all_queries = [query_embedding] + selfie_embeddings
-        print(f"[SCAN] Searching FAISS with {len(all_queries)} query vectors ({vector_store.index.ntotal} indexed)")
+        # ── Step 2: Search FAISS for event photos containing this face directly ──
+        print(f"[SCAN] Searching FAISS with scanned face embedding ({vector_store.index.ntotal} indexed)")
 
         event_results = vector_store.search(
-            query_embeddings=all_queries,
+            query_embeddings=[query_embedding],
             top_k=DATASET_TOP_K,
             threshold=PARENT_FACE_ACCEPT_DISTANCE,
             min_support=1,
@@ -616,8 +514,8 @@ async def parent_scan_and_match(
 
         print(f"[SCAN] FAISS returned {len(event_results)} event photo matches")
 
-        # Add FAISS matches (both event photos AND selfies)
-        seen_ids = {m["id"] for m in matches}
+        matches = []
+        seen_ids = set()
         for result in event_results:
             img_id = result.get("image_id", "")
             if img_id in seen_ids:
@@ -628,12 +526,8 @@ async def parent_scan_and_match(
             image_path = result.get("image_path", "")
 
             if source == "selfie":
-                # Selfie — image is in images/selfies/
-                abs_image_path = image_path if os.path.isabs(image_path) else os.path.join(BASE_DIR, image_path)
-                if not os.path.exists(abs_image_path):
-                    continue
-                basename = os.path.basename(image_path)
-                preview_url = f"/images/selfies/{basename}"
+                # Skip reference selfies in the matches results, only return actual event photos
+                continue
             else:
                 # Event image — look up in event_images table
                 conn = db.get_connection()
@@ -665,14 +559,16 @@ async def parent_scan_and_match(
                 "id": img_id,
                 "preview_url": preview_url,
                 "confidence_pct": confidence,
-                "source": source if source != "selfie" else "enrollment",
+                "source": source,
             })
 
-        print(f"[SCAN] ✅ TOTAL: {len(matches)} photos ({sum(1 for m in matches if m['source']=='enrollment')} selfies + {sum(1 for m in matches if m['source']=='event')} event)")
+        print(f"[SCAN] ✅ TOTAL: {len(matches)} event photos found")
+
+        best_confidence = matches[0]["confidence_pct"] if matches else 85.0
 
         return {
             "status": "green",
-            "message": f"Child identified! {len(matches)} photos found. Match confidence: {best_similarity:.0%}",
+            "message": f"Face identified! {len(matches)} photos found. Match confidence: {best_confidence}%",
             "child_name": child["name"],
             "matches": matches,
         }
