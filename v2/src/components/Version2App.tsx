@@ -285,6 +285,13 @@ function ParentAccessV2() {
 
   useEffect(() => { if (session) void startCam(); return () => stopCam(); }, [session, startCam, stopCam]);
 
+  useEffect(() => {
+    if (videoRef.current && streamRef.current && !videoRef.current.srcObject) {
+      videoRef.current.srcObject = streamRef.current;
+      void videoRef.current.play().catch(() => {});
+    }
+  }, [selected]);
+
   const login = async (e: FormEvent) => {
     e.preventDefault(); setErr(''); setBusy(true);
     const fd = new FormData(); fd.append('registration_number', reg.trim()); fd.append('dob', dob.trim());
@@ -302,8 +309,8 @@ function ParentAccessV2() {
   const rescan = () => {
     addLog('Resetting token caches. Preparing array scan...', 'warn');
     showToast('Restarting optic stream...', 'info');
-    setMatches([]); setStatus('scanning');
-    if (!intervalRef.current) intervalRef.current = setInterval(() => void doScan(), 3500);
+    setMatches([]);
+    void startCam();
   };
 
   /* Login Screen */

@@ -225,11 +225,18 @@ function ScannerPage({ session, onLogout }: { session: Session; onLogout: () => 
 
   useEffect(() => { void startCam(); return () => stopCam(); }, [startCam, stopCam]);
 
+  useEffect(() => {
+    if (videoRef.current && streamRef.current && !videoRef.current.srcObject) {
+      videoRef.current.srcObject = streamRef.current;
+      void videoRef.current.play().catch(() => {});
+    }
+  }, [selected]);
+
   const rescan = () => {
     addLog('Resetting biometric search caches...', 'warn');
     showToast('Rescanning initiated...', 'info');
-    setMatches([]); setStatus('scanning'); setMsg('Rescanning...');
-    if (!intervalRef.current) { intervalRef.current = setInterval(() => void doScan(), 3500); }
+    setMatches([]);
+    void startCam();
   };
 
   const handleSkipScan = () => {
