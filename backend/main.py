@@ -575,6 +575,14 @@ async def parent_scan_and_match(
     if not child:
         raise HTTPException(status_code=400, detail="No child mapped for this account")
 
+    # Determine demo status
+    user = db.get_user_by_id(user_id)
+    is_demo = False
+    if user and user.get("email"):
+        is_demo = user["email"].lower().endswith("@schoolsnap.local")
+    name_lower = child["name"].lower()
+    is_demo = is_demo or any(x in name_lower for x in ["aarav", "kumar", "isha", "reddy", "vihaan", "rao"])
+
     is_cloud = os.getenv("RAILWAY_STATIC_URL") or os.getenv("RAILWAY_SERVICE_ID") or os.path.exists("/.dockerenv")
     default_bypass = "true" if is_cloud else "false"
     bypass_ai = os.getenv("BYPASS_HEAVY_AI", default_bypass).lower() == "true"
@@ -619,11 +627,9 @@ async def parent_scan_and_match(
         filtered_images = get_demo_filtered_images(child["name"], all_images)
         
         # 4. Try actual biometric matching on filtered_images using SQLite cache if selfies exist
-        # ONLY do this if we are a demo child to ensure we use preloaded embeddings
-        name_lower = child["name"].lower()
-        is_demo = any(x in name_lower for x in ["aarav", "kumar", "isha", "reddy", "vihaan", "rao"])
-        
-        if is_demo and child_selfies and filtered_images:
+        biometric_matches = []
+        has_run_biometric = False
+        if child_selfies and filtered_images:
             conn = db.get_connection()
             placeholders = ",".join("?" for _ in filtered_images)
             event_faces = conn.execute(
@@ -632,7 +638,6 @@ async def parent_scan_and_match(
             ).fetchall()
             conn.close()
             
-            biometric_matches = []
             for face in event_faces:
                 try:
                     face_emb = np.array(json.loads(face["embedding_json"]))
@@ -643,11 +648,21 @@ async def parent_scan_and_match(
                             break
                 except Exception:
                     continue
+            has_run_biometric = True
             
-            filtered_images = [img for img in filtered_images if img["id"] in biometric_matches]
+        if has_run_biometric:
+            matched_images = [img for img in filtered_images if img["id"] in biometric_matches]
+            # Fallback to preloaded photos ONLY if it's a demo parent
+            if not matched_images and is_demo:
+                matched_images = filtered_images
+        else:
+            if is_demo:
+                matched_images = filtered_images
+            else:
+                matched_images = []
 
         matches = []
-        for img_row in filtered_images:
+        for img_row in matched_images:
             preview_path = img_row["preview_path"] or img_row["original_path"]
             basename = os.path.basename(preview_path)
             if "previews" in preview_path:
@@ -664,7 +679,6 @@ async def parent_scan_and_match(
                 "source": "event",
             })
 
-        best_confidence = matches[0]["confidence_pct"] if matches else 85.0
         return {
             "status": "green",
             "message": f"Demo Mode: Found {len(matches)} event photos for {child['name']}.",
@@ -761,8 +775,8 @@ async def parent_scan_and_match(
             except Exception as e:
                 print(f"[SCAN] ❌ FAISS search exception: {e}. Falling back to demo mode.")
 
-        # Demo fallback: if no FAISS matches, return sample event photos
-        if len(matches) == 0:
+        # Demo fallback: if no FAISS matches and it is a demo parent, return sample event photos
+        if len(matches) == 0 and is_demo:
             print(f"[SCAN] No FAISS matches found. Demo fallback: returning sample event photos.")
             conn = db.get_connection()
             # Find the event_id of the most recently uploaded image to prioritize latest event photos
@@ -830,6 +844,14 @@ async def parent_bypass_scan(
     if not child:
         raise HTTPException(status_code=400, detail="No child mapped for this account")
 
+    # Determine demo status
+    user = db.get_user_by_id(user_id)
+    is_demo = False
+    if user and user.get("email"):
+        is_demo = user["email"].lower().endswith("@schoolsnap.local")
+    name_lower = child["name"].lower()
+    is_demo = is_demo or any(x in name_lower for x in ["aarav", "kumar", "isha", "reddy", "vihaan", "rao"])
+
     is_cloud = os.getenv("RAILWAY_STATIC_URL") or os.getenv("RAILWAY_SERVICE_ID") or os.path.exists("/.dockerenv")
     default_bypass = "true" if is_cloud else "false"
     bypass_ai = os.getenv("BYPASS_HEAVY_AI", default_bypass).lower() == "true"
@@ -876,11 +898,9 @@ async def parent_bypass_scan(
         filtered_images = get_demo_filtered_images(child["name"], all_images)
         
         # 4. Try actual biometric matching on filtered_images using SQLite cache if selfies exist
-        # ONLY do this if we are a demo child to ensure we use preloaded embeddings
-        name_lower = child["name"].lower()
-        is_demo = any(x in name_lower for x in ["aarav", "kumar", "isha", "reddy", "vihaan", "rao"])
-        
-        if is_demo and child_selfies and filtered_images:
+        biometric_matches = []
+        has_run_biometric = False
+        if child_selfies and filtered_images:
             conn = db.get_connection()
             placeholders = ",".join("?" for _ in filtered_images)
             event_faces = conn.execute(
@@ -889,7 +909,6 @@ async def parent_bypass_scan(
             ).fetchall()
             conn.close()
             
-            biometric_matches = []
             for face in event_faces:
                 try:
                     face_emb = np.array(json.loads(face["embedding_json"]))
@@ -900,8 +919,18 @@ async def parent_bypass_scan(
                             break
                 except Exception:
                     continue
-            
-            filtered_images = [img for img in filtered_images if img["id"] in biometric_matches]
+            has_run_biometric = True
+
+        if has_run_biometric:
+            matched_images = [img for img in filtered_images if img["id"] in biometric_matches]
+            # Fallback to preloaded photos ONLY if it's a demo parent
+            if not matched_images and is_demo:
+                matched_images = filtered_images
+        else:
+            if is_demo:
+                matched_images = filtered_images
+            else:
+                matched_images = []
 
         matches = []
         # Add selfie matches first
@@ -915,7 +944,7 @@ async def parent_bypass_scan(
             })
 
         # Append event matches
-        for img_row in filtered_images:
+        for img_row in matched_images:
             preview_path = img_row["preview_path"] or img_row["original_path"]
             basename = os.path.basename(preview_path)
             if "previews" in preview_path:
@@ -942,6 +971,13 @@ async def parent_bypass_scan(
 
     # If NOT bypass_ai, run real ONNX pipeline
     if len(selfies) == 0:
+        if not is_demo:
+            return {
+                "status": "green",
+                "message": f"No enrollment photos found.",
+                "child_name": child["name"],
+                "matches": [],
+            }
         # Demo fallback: return all event photos from the database
         print(f"[BYPASS] No selfies found. Demo fallback: returning all event photos.")
         conn = db.get_connection()
@@ -1086,8 +1122,8 @@ async def parent_bypass_scan(
             "source": "event",
         })
 
-    # Demo fallback: if no event photos found via FAISS, return sample event photos
-    if len(matches) == len(selfies):
+    # Demo fallback: if no event photos found via FAISS and it is a demo parent, return sample event photos
+    if len(matches) == len(selfies) and is_demo:
         print(f"[BYPASS] No FAISS event matches found. Demo fallback: returning sample event photos.")
         conn = db.get_connection()
         latest_img = conn.execute(
@@ -1570,7 +1606,7 @@ async def match_images(token: str = Form(...), child_id: str = Form(...)):
     # Get purchase status and format results
     user_purchases = set(db.get_user_purchases(user_id))
     
-    results = []
+    matched_images_db = []
     for m in robust_matches:
         image_id = m.get('image_id', os.path.basename(m['image_path']).split(".")[0])
 
@@ -1580,17 +1616,34 @@ async def match_images(token: str = Form(...), child_id: str = Form(...)):
             continue
         if not image.get("preview_path") or not os.path.exists(os.path.join(BASE_DIR, image["preview_path"])):
             continue
+        matched_images_db.append(image)
 
+    # Filter out demo/preloaded event photos from custom parent results
+    filtered_matched_images = get_demo_filtered_images(child["name"], matched_images_db)
+
+    results = []
+    for image in filtered_matched_images:
+        image_id = image["id"]
         is_purchased = image_id in user_purchases
+
+        # Find confidence in robust_matches for this image
+        m_conf = 0.5
+        support = 1
+        for m in robust_matches:
+            m_id = m.get('image_id', os.path.basename(m['image_path']).split(".")[0])
+            if m_id == image_id:
+                m_conf = m['confidence']
+                support = int(m.get("support_queries", 1))
+                break
 
         results.append({
             "id": image_id,
             "preview_url": f"/images/previews/{image_id}.jpg",
             "hd_url": f"/hd-image/{image_id}" if is_purchased else None,
             "is_purchased": is_purchased,
-            "confidence": round(m['confidence'], 3),
-            "accuracy_pct": round(max(0, 1 - m['confidence'] / 2) * 100, 2),
-            "support": int(m.get("support_queries", 0)),
+            "confidence": round(m_conf, 3),
+            "accuracy_pct": round(max(0, 1 - m_conf / 2) * 100, 2),
+            "support": support,
             "match_mode": "strict_only"
         })
     
