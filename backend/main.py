@@ -502,11 +502,12 @@ def get_demo_filtered_images(child_name: str, all_images: list) -> list:
     Returns only the photos corresponding to the child_name.
     """
     name_lower = child_name.lower()
+    words = name_lower.split()
     
-    # Check if we are dealing with a demo child
-    is_aarav = "aarav" in name_lower or "kumar" in name_lower
-    is_isha = "isha" in name_lower or "reddy" in name_lower
-    is_vihaan = "vihaan" in name_lower or "rao" in name_lower
+    # Check if we are dealing with a demo child (using exact word matches to avoid matching substrings like 'isha' in 'krishna')
+    is_aarav = "aarav" in words or ("aarav" in name_lower and "kumar" in words)
+    is_isha = "isha" in words or ("isha" in name_lower and "reddy" in words)
+    is_vihaan = "vihaan" in words or ("vihaan" in name_lower and "rao" in words)
     
     # Pre-lookup filenames if they are missing or look like a UUID (doesn't contain original demo names)
     conn = None
@@ -581,7 +582,16 @@ async def parent_scan_and_match(
     if user and user.get("email"):
         is_demo = user["email"].lower().endswith("@schoolsnap.local")
     name_lower = child["name"].lower()
-    is_demo = is_demo or any(x in name_lower for x in ["aarav", "kumar", "isha", "reddy", "vihaan", "rao"])
+    words = name_lower.split()
+    is_demo_name = (
+        ("aarav" in words and "kumar" in words) or
+        ("isha" in words and "reddy" in words) or
+        ("vihaan" in words and "rao" in words) or
+        ("aarav" in words) or
+        ("isha" in words) or
+        ("vihaan" in words)
+    )
+    is_demo = is_demo or is_demo_name
 
     is_cloud = os.getenv("RAILWAY_STATIC_URL") or os.getenv("RAILWAY_SERVICE_ID") or os.path.exists("/.dockerenv")
     default_bypass = "true" if is_cloud else "false"
@@ -850,7 +860,16 @@ async def parent_bypass_scan(
     if user and user.get("email"):
         is_demo = user["email"].lower().endswith("@schoolsnap.local")
     name_lower = child["name"].lower()
-    is_demo = is_demo or any(x in name_lower for x in ["aarav", "kumar", "isha", "reddy", "vihaan", "rao"])
+    words = name_lower.split()
+    is_demo_name = (
+        ("aarav" in words and "kumar" in words) or
+        ("isha" in words and "reddy" in words) or
+        ("vihaan" in words and "rao" in words) or
+        ("aarav" in words) or
+        ("isha" in words) or
+        ("vihaan" in words)
+    )
+    is_demo = is_demo or is_demo_name
 
     is_cloud = os.getenv("RAILWAY_STATIC_URL") or os.getenv("RAILWAY_SERVICE_ID") or os.path.exists("/.dockerenv")
     default_bypass = "true" if is_cloud else "false"
